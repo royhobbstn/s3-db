@@ -1,0 +1,31 @@
+Browsers Limit to 6 Simultaneous Connections per Hostname
+http://blog.olamisan.com/max-parallel-http-connections-in-a-browser
+
+Also, 
+    - no data fee for data coming into AWS
+    - no data fee for data from S3 -> EC2 (assuming also applies to S3 => Lambda within Region)
+    
+NodeJS Limit Simultaneous Requests?
+
+Solution Could be AJAX request => Serverless function => Parallel S3 requests collating data.
+Data reduced in cloud and sent to Application.
+
+
+
+ - Load example Data into S3
+    Format: dataset/sequence_type/sequence_num/geoid
+    
+
+- Server(less) function handles logic of which attribute to get.
+
+To Build
+
+BASH - with AWS CLI Load one sample sequence file into S3
+
+HTML - Simple Sample AJAX POST request, 
+{ ids: 1000 Tract GEOIDs, attr: attribute formula (simple value or attribute/total) }
+
+Serverless function:
+    Makes a Call for Each GEOID.
+    Extract data for each GEOID and find needed attribute based on supplied formula.
+    send JSON [{geoid, value}] (later send GL Map Style Only?)
