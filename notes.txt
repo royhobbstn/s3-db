@@ -5,15 +5,14 @@ Also,
     - no data fee for data coming into AWS
     - no data fee for data from S3 -> EC2 (assuming also applies to S3 => Lambda within Region)
     
-NodeJS Limit Simultaneous Requests?
+NodeJS Limit Simultaneous Requests? No
+https://stackoverflow.com/questions/12060869/why-is-node-js-only-processing-six-requests-at-a-time
 
 Solution Could be AJAX request => Serverless function => Parallel S3 requests collating data.
 Data reduced in cloud and sent to Application.
 
-
-
  - Load example Data into S3
-    Format: dataset/sequence_type/sequence_num/geoid
+    Format: dataset/sequence_type/sequence_num/sumlev/state?/geoid
     
 
 - Server(less) function handles logic of which attribute to get.
@@ -21,6 +20,7 @@ Data reduced in cloud and sent to Application.
 To Build
 
 BASH - with AWS CLI Load one sample sequence file into S3
+    - Combine with geofile on load to bucket
 
 HTML - Simple Sample AJAX POST request, 
 { ids: 1000 Tract GEOIDs, attr: attribute formula (simple value or attribute/total) }
@@ -28,4 +28,4 @@ HTML - Simple Sample AJAX POST request,
 Serverless function:
     Makes a Call for Each GEOID.
     Extract data for each GEOID and find needed attribute based on supplied formula.
-    send JSON [{geoid, value}] (later send GL Map Style Only?)
+    send JSON [{geoid, value}] (later send back GL Map Style Object Only)
