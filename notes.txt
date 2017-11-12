@@ -34,8 +34,27 @@ Serverless function:
     send JSON [{geoid, value}] (later send back GL Map Style Object Only)
     
     
+    Cloudfront in front of S3.
     
-
+PUT and get requests are expensive.  Moving large amounts of data around in the same region is not.
+    - must combine data together in a reasonable way
+    - blocks in BG
+    - tracts in county
+    - counties in state
     
-
+--- 
+blocks - id, attribute value - that's it.  
+    - how big is a style file with 11,000,000+ features?  How long to calculate?
+    - look up mapbox strategy article separating layers into multiple layers. for size considerations.
+        - https://blog.mapbox.com/hundreds-of-thousands-of-polygons-rendered-on-the-fly-9eb0b81b64f3
+        
+ - blocks by county is reasonable - if:
+    - make it impossible to view entire map at block level.  strictly control zoomlev for blocks
+        - and maybe for block groups too
+        
+ - somehow need to get all blocks in single tileset layer.  with just geoid as key
+ 
     
+    
+    
+    // PREJOIN GEOFILE with EVERY SEQUENCE FILE

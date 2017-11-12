@@ -14,20 +14,44 @@ const header = ['FILEID', 'STUSAB', 'SUMLEVEL', 'COMPONENT', 'LOGRECNO', 'US', '
     'BLANK1', 'CDCURR', 'SLDU', 'SLDL', 'BLANK2', 'BLANK3', 'ZCTA5', 'SUBMCD', 'SDELM', 'SDSEC', 'SDUNI',
     'UR', 'PCI', 'BLANK4', 'BLANK5', 'PUMA5', 'BLANK6', 'GEOID', 'NAME', 'BTTR', 'BTBG', 'BLANK7'];
 
+const data_cache = {};
+
 Papa.parse(fs.readFileSync(file, { encoding: 'binary' }), {
-    preview: 100,
+    preview: 10000,
     complete: function () {
         console.log("Finished");
+        // console.log(data_cache);
+        // TODO loop over OBJ here to upload to S3, rather than in the step function
+        // putObject(`geo/${obj.GEOID}.json`, obj);
     },
     step: function (results) {
         if (results.errors.length) {
             console.log(results.errors);
         }
+
+        // only tracts right now
+        const sumlev = results.data[0][2];
+        if (sumlev !== "140") {
+            return;
+        }
+
+        // if county doesn't exist in data_cache, create it
+        const county = results.data[0][10];
+        if (!data_cache[county]) {
+            data_cache[county] = [];
+        }
+
         const obj = {};
+
         results.data[0].forEach((d, i) => {
+            // console.log(d)
             obj[header[i]] = d;
         });
-        putObject(`geo/${obj.GEOID}.json`, obj);
+
+        data_cache[county].push(obj);
+
+        // looks like: {"099":[{},{}], "101": [{},{}]}
+        // needs to be: {"099": {"GEOID": {}, "GEOID": {} }, "101": {"GEOID": {}, "GEOID": {} } };
     }
 });
 
@@ -45,6 +69,12 @@ function putObject(key, value) {
     });
 }
 
+// TODO geofiles combined with each seq file.
 
 // TODO:  download all geo files, loop and upload all keys to bucket
 // cost to put objects in bucket?  could be millions of requests
+
+// was i successfull in getting a block layer for all USA?
+// no
+// use tippecanoe with state level geojson to export tileset for zoomleve 8+?  
+// - use tippecanoe multiple geojson option.
