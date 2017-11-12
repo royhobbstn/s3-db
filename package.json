@@ -1,0 +1,23 @@
+{
+  "name": "s3-db",
+  "version": "1.0.0",
+  "description": "Testing S3 as a read-only database with potentially thousands of simultaneous queries.",
+  "main": "uploadGeo.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/royhobbstn/s3-db.git"
+  },
+  "author": "Daniel Trone",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/royhobbstn/s3-db/issues"
+  },
+  "homepage": "https://github.com/royhobbstn/s3-db#readme",
+  "dependencies": {
+    "aws-sdk": "^2.149.0",
+    "papaparse": "^4.3.6"
+  }
+}

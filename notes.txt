@@ -1,6 +1,9 @@
 Browsers Limit to 6 Simultaneous Connections per Hostname
 http://blog.olamisan.com/max-parallel-http-connections-in-a-browser
 
+AWS S3 Outperforms GCP in latency. Ideal for multiple smaller queries.
+http://blog.zachbjornson.com/2015/12/29/cloud-storage-performance.html
+
 Also, 
     - no data fee for data coming into AWS
     - no data fee for data from S3 -> EC2 (assuming also applies to S3 => Lambda within Region)
@@ -29,3 +32,10 @@ Serverless function:
     Makes a Call for Each GEOID.
     Extract data for each GEOID and find needed attribute based on supplied formula.
     send JSON [{geoid, value}] (later send back GL Map Style Object Only)
+    
+    
+    
+
+    
+
+    
