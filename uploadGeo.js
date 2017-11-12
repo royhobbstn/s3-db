@@ -20,9 +20,12 @@ Papa.parse(fs.readFileSync(file, { encoding: 'binary' }), {
     preview: 10000,
     complete: function () {
         console.log("Finished");
-        // console.log(data_cache);
-        // TODO loop over OBJ here to upload to S3, rather than in the step function
-        // putObject(`geo/${obj.GEOID}.json`, obj);
+
+        // add AWS file for each county (includes all tracts in county)
+        Object.keys(data_cache).forEach((key) => {
+            console.log(key);
+            putObject(`geo/140/08/${key}.json`, data_cache[key]); // todo seq
+        });
     },
     step: function (results) {
         if (results.errors.length) {
@@ -38,20 +41,20 @@ Papa.parse(fs.readFileSync(file, { encoding: 'binary' }), {
         // if county doesn't exist in data_cache, create it
         const county = results.data[0][10];
         if (!data_cache[county]) {
-            data_cache[county] = [];
+            data_cache[county] = {};
         }
+
+        const geoid = results.data[0][48];
 
         const obj = {};
 
         results.data[0].forEach((d, i) => {
-            // console.log(d)
             obj[header[i]] = d;
         });
 
-        data_cache[county].push(obj);
+        data_cache[county][geoid] = obj;
 
-        // looks like: {"099":[{},{}], "101": [{},{}]}
-        // needs to be: {"099": {"GEOID": {}, "GEOID": {} }, "101": {"GEOID": {}, "GEOID": {} } };
+        // result: { county: { geoid_tr: {}, geoid_tr: {} }, ... } = object of objects of objects
     }
 });
 
@@ -71,10 +74,6 @@ function putObject(key, value) {
 
 // TODO geofiles combined with each seq file.
 
-// TODO:  download all geo files, loop and upload all keys to bucket
-// cost to put objects in bucket?  could be millions of requests
+// TODO:  pipeline from file download
 
-// was i successfull in getting a block layer for all USA?
-// no
-// use tippecanoe with state level geojson to export tileset for zoomleve 8+?  
-// - use tippecanoe multiple geojson option.
+// Colorado Tracts Tileset
