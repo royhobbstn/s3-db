@@ -1,3 +1,5 @@
+'use strict';
+
 const fs = require('fs');
 const path = require('path');
 const Papa = require('papaparse');
@@ -6,55 +8,93 @@ const AWS = require('aws-sdk');
 const s3 = new AWS.S3();
 const myBucket = 's3db-acs1115';
 
-const file = path.join(__dirname, 'g20155co.csv');
-
-const header = ['FILEID', 'STUSAB', 'SUMLEVEL', 'COMPONENT', 'LOGRECNO', 'US', 'REGION', 'DIVISION', 'STATECE',
-    'STATE', 'COUNTY', 'COUSUB', 'PLACE', 'TRACT', 'BLKGRP', 'CONCIT', 'AIANHH', 'AIANHHFP', 'AIHHTLI',
-    'AITSCE', 'AITS', 'ANRC', 'CBSA', 'CSA', 'METDIV', 'MACC', 'MEMI', 'NECTA', 'CNECTA', 'NECTADIV', 'UA',
-    'BLANK1', 'CDCURR', 'SLDU', 'SLDL', 'BLANK2', 'BLANK3', 'ZCTA5', 'SUBMCD', 'SDELM', 'SDSEC', 'SDUNI',
-    'UR', 'PCI', 'BLANK4', 'BLANK5', 'PUMA5', 'BLANK6', 'GEOID', 'NAME', 'BTTR', 'BTBG', 'BLANK7'];
+const file = path.join(__dirname, 'acs_temp_cproj/ready/eseq106.csv');
 
 const data_cache = {};
 
 Papa.parse(fs.readFileSync(file, { encoding: 'binary' }), {
-    preview: 10000,
+    header: true,
     complete: function () {
-        console.log("Finished");
 
-        // add AWS file for each county (includes all tracts in county)
-        Object.keys(data_cache).forEach((key) => {
-            console.log(key);
-            putObject(`geo/140/08/${key}.json`, data_cache[key]); // todo seq
+        // TODO batch calls, no more than X at a time.
+
+        let insert_count = 0;
+        // add AWS file for each aggregated level
+        Object.keys(data_cache).forEach(sequence => {
+            Object.keys(data_cache[sequence]).forEach(sumlev => {
+                Object.keys(data_cache[sequence][sumlev]).forEach(aggregator => {
+                    insert_count++;
+                    console.log(`insert: ${sequence}/${sumlev}/${aggregator}.json`);
+                    putObject(`${sequence}/${sumlev}/${aggregator}.json`, data_cache[sequence][sumlev][aggregator]);
+                });
+            });
+
         });
+
+        console.log("Finished");
+        console.log(`inserted ${insert_count} records into S3`);
+
     },
     step: function (results) {
+
         if (results.errors.length) {
-            console.log(results.errors);
+            // TODO extra column error
+            // console.log('E: ', results.errors);
         }
 
-        // only tracts right now
-        const sumlev = results.data[0][2];
-        if (sumlev !== "140") {
+        // only tracts, bg, county, place, state right now
+        const sumlev = results.data[0].SUMLEVEL;
+
+        const component = results.data[0].COMPONENT;
+        if (sumlev !== '140' && sumlev !== '150' && sumlev !== '050' && sumlev !== '160' && sumlev !== '040') {
+            return;
+        }
+        if (component !== '00') {
             return;
         }
 
-        // if county doesn't exist in data_cache, create it
-        const county = results.data[0][10];
-        if (!data_cache[county]) {
-            data_cache[county] = {};
+
+        const geoid = results.data[0].GEOID;
+        const county = results.data[0].COUNTY;
+        const state = results.data[0].STATE;
+        const sequence = '106';
+
+        let aggregator;
+
+        // aggregation level of each geography
+        switch (sumlev) {
+        case '140':
+        case '150':
+            aggregator = county;
+            break;
+        case '160':
+        case '050':
+            aggregator = state;
+            break;
+        case '040':
+            aggregator = component;
+            break;
+        default:
+            console.log(sumlev);
+            console.error('unknown summary level');
+            break;
         }
 
-        const geoid = results.data[0][48];
+        if (!data_cache[sequence]) {
+            data_cache[sequence] = {};
+        }
 
-        const obj = {};
+        if (!data_cache[sequence][sumlev]) {
+            data_cache[sequence][sumlev] = {};
+        }
 
-        results.data[0].forEach((d, i) => {
-            obj[header[i]] = d;
-        });
+        if (!data_cache[sequence][sumlev][aggregator]) {
+            data_cache[sequence][sumlev][aggregator] = {};
+        }
 
-        data_cache[county][geoid] = obj;
+        // this is how the data will be modeled in S3
+        data_cache[sequence][sumlev][aggregator][geoid] = results.data[0];
 
-        // result: { county: { geoid_tr: {}, geoid_tr: {} }, ... } = object of objects of objects
     }
 });
 
@@ -71,9 +111,3 @@ function putObject(key, value) {
         }
     });
 }
-
-// TODO geofiles combined with each seq file.
-
-// TODO:  pipeline from file download
-
-// Colorado Tracts Tileset

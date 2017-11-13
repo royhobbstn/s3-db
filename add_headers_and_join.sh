@@ -118,11 +118,17 @@ while IFS=',' read f1 f2 f3 f4 f5; do echo -n ","`printf $f2`"_"`printf %03d $f4
 
 cd schemas
 
-for file in *.csv; do sed -i -e '$a\' file; done;
+for file in *.txt; do sed -i -e '$a\' $file; done;
 
 echo "schema files created"
 
-cd ../joined
+cd ..
 
-# prepend each file with corresponding header - concat?
-# cat schema0001.txt eseq001.csv > hmmm.txt
+mkdir ready
+
+cd ./joined
+
+# prepend each file with corresponding header
+for file in *.csv; do cat ../schemas/schema0${file:4:3}.txt $file > ../ready/$file; done;
+
+# files we need are in ready folder
