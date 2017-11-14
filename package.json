@@ -18,6 +18,7 @@
   "homepage": "https://github.com/royhobbstn/s3-db#readme",
   "dependencies": {
     "aws-sdk": "^2.149.0",
+    "bluebird": "^3.5.1",
     "papaparse": "^4.3.6"
   }
 }

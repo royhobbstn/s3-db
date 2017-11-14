@@ -3,36 +3,41 @@
 const fs = require('fs');
 const path = require('path');
 const Papa = require('papaparse');
-
+const Promise = require('bluebird');
 const AWS = require('aws-sdk');
+
 const s3 = new AWS.S3();
 const myBucket = 's3db-acs1115';
-
 const file = path.join(__dirname, 'acs_temp_cproj/ready/eseq106.csv');
-
 const data_cache = {};
+
 
 Papa.parse(fs.readFileSync(file, { encoding: 'binary' }), {
     header: true,
     complete: function () {
 
-        // TODO batch calls, no more than X at a time.
+        let put_object_array = [];
 
-        let insert_count = 0;
-        // add AWS file for each aggregated level
         Object.keys(data_cache).forEach(sequence => {
             Object.keys(data_cache[sequence]).forEach(sumlev => {
                 Object.keys(data_cache[sequence][sumlev]).forEach(aggregator => {
-                    insert_count++;
-                    console.log(`insert: ${sequence}/${sumlev}/${aggregator}.json`);
-                    putObject(`${sequence}/${sumlev}/${aggregator}.json`, data_cache[sequence][sumlev][aggregator]);
+                    const filename = `${sequence}/${sumlev}/${aggregator}.json`;
+                    console.log(`insert: ${filename}`);
+                    const data = data_cache[sequence][sumlev][aggregator];
+                    put_object_array.push({ filename, data });
                 });
             });
 
         });
 
-        console.log("Finished");
-        console.log(`inserted ${insert_count} records into S3`);
+        // run up to 5 AWS PutObject calls concurrently
+        Promise.map(put_object_array, function (obj) {
+            return putObject(obj.filename, obj.data);
+        }, { concurrency: 5 }).then(d => {
+            console.log(`inserted: ${d.length} objects into S3`);
+            console.log("Finished");
+        });
+
 
     },
     step: function (results) {
@@ -100,14 +105,19 @@ Papa.parse(fs.readFileSync(file, { encoding: 'binary' }), {
 
 
 function putObject(key, value) {
-    const params = { Bucket: myBucket, Key: key, Body: JSON.stringify(value), ContentType: 'application/json' };
-    s3.putObject(params, function (err, data) {
-        if (err) {
-            console.log(err);
-        }
-        else {
-            console.log("Successfully uploaded data to myBucket/myKey");
-            console.log(data);
-        }
+    return new Promise((resolve, reject) => {
+        const params = { Bucket: myBucket, Key: key, Body: JSON.stringify(value), ContentType: 'application/json' };
+        s3.putObject(params, function (err, data) {
+            if (err) {
+                console.log(err);
+                return reject(err);
+            }
+            else {
+                console.log("Successfully uploaded data to myBucket/myKey");
+                console.log(data);
+                return resolve(data);
+            }
+        });
     });
+
 }

@@ -20,28 +20,14 @@ Data reduced in cloud and sent to Application.
 
 - Server(less) function handles logic of which attribute to get.
 
-To Build
 
-BASH - with AWS CLI Load one sample sequence file into S3
-    - Combine with geofile on load to bucket
-
-HTML - Simple Sample AJAX POST request, 
-{ ids: 1000 Tract GEOIDs, attr: attribute formula (simple value or attribute/total) }
-
-Serverless function:
-    Makes a Call for Each GEOID.
-    Extract data for each GEOID and find needed attribute based on supplied formula.
-    send JSON [{geoid, value}] (later send back GL Map Style Object Only)
-    
-    
-    Cloudfront in front of S3.
-    
 PUT and get requests are expensive.  Moving large amounts of data around in the same region is not.
     - must combine data together in a reasonable way
     - blocks in BG
     - tracts in county
     - counties in state
     
+
 --- 
 blocks - id, attribute value - that's it.  
     - how big is a style file with 11,000,000+ features?  How long to calculate?
@@ -55,6 +41,18 @@ blocks - id, attribute value - that's it.
  - somehow need to get all blocks in single tileset layer.  with just geoid as key
  
     
+
+    ------------------------
+
+To Build
+
+Serverless function:
+    Makes a Call for Each GEOID.
+    Extract data for each GEOID and find needed attribute based on supplied formula.
+    send JSON [{geoid, value}] (later send back GL Map Style Object Only)
     
     
-    // PREJOIN GEOFILE with EVERY SEQUENCE FILE
+Cloudfront in front of S3.
+    
+The Map
+    
