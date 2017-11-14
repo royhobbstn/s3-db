@@ -1,3 +1,4 @@
 node_modules
 acs_temp_cproj
 acs1115_logfile.txt
+*.log
