@@ -43,8 +43,8 @@ Papa.parse(fs.readFileSync(file, { encoding: 'binary' }), {
     step: function (results) {
 
         if (results.errors.length) {
-            // TODO extra column error
-            // console.log('E: ', results.errors);
+            // TODO now 1 extra row error
+            console.log('E: ', results.errors);
         }
 
         // only tracts, bg, county, place, state right now

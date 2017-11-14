@@ -94,6 +94,12 @@ for file in *.csv; do echo "joining $file with geography"; join -t , -1 1 -2 1 .
 
 echo "files joined"
 
+cd ../joined
+
+for file in *.csv; do sed -i 's/,$//' $file; done;
+
+echo "removed trailing comma csv"
+
 cd ..
 
 mkdir schemas
