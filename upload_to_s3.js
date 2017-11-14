@@ -60,7 +60,7 @@ Papa.parse(fs.readFileSync(file, { encoding: 'binary' }), {
 
 
         const geoid = results.data[0].GEOID;
-        const county = results.data[0].COUNTY;
+        const statecounty = `${results.data[0].STATE}${results.data[0].COUNTY}`;
         const state = results.data[0].STATE;
         const sequence = '106';
 
@@ -70,7 +70,7 @@ Papa.parse(fs.readFileSync(file, { encoding: 'binary' }), {
         switch (sumlev) {
         case '140':
         case '150':
-            aggregator = county;
+            aggregator = statecounty;
             break;
         case '160':
         case '050':
