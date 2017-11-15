@@ -40,7 +40,10 @@ blocks - id, attribute value - that's it.
         
  - somehow need to get all blocks in single tileset layer.  with just geoid as key
  
-    
+ - design decision - only one seq.  if allow multiple, we're forced to parse the expression in the main area
+ - we'll run out of memory quickly
+ - if we keep to one table, we can offload the expression calculation to the micro-serverless function
+ - and send only the calculated attribute back to main
 
     ------------------------
 
@@ -60,3 +63,5 @@ The Map
 Build Server:
     POST Takes [GEOID, GEOID], EXPRESSION
     Returns Data
+    
+    
