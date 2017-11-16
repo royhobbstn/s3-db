@@ -49,19 +49,19 @@ blocks - id, attribute value - that's it.
 
 To Build
 
-Serverless function:
-    Makes a Call for Each GEOID.
-    Extract data for each GEOID and find needed attribute based on supplied formula.
-    send JSON [{geoid, value}] (later send back GL Map Style Object Only)
-    
+Test more complicated expressions.
+
+Load all Colorado
+
+Test Multi-County BG datasets
+
+How does multicounty compare to loading all BGs in the State in One State File?
+    - What about for Blocks?  Still necessary for Blocks?  What about 1.5GB memory limit?
+
+
+Deploy to Lambda    
     
 Cloudfront in front of S3.
     
 The Map
-    
-
-Build Server:
-    POST Takes [GEOID, GEOID], EXPRESSION
-    Returns Data
-    
     

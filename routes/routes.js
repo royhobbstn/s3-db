@@ -13,7 +13,7 @@ var appRouter = function (app) {
 
     /*****************/
 
-    // curl -d '{"geoids":["08031", "08005"], "expression":["(", "B01001003", "+", "B01001004", "+", "B01001027", "+", "B01001028", ")", "/", "B00001001"]}' -H "Content-Type: application/json" -X POST https://nodejs-server-royhobbstn.c9users.io/get
+    // curl -d '{"geoids":["08031", "08005"], "expression":["(", "B01001003", "+", "B01001004", "+", "B01001027", "+", "B01001028", ")", "/", "B01001001"]}' -H "Content-Type: application/json" -X POST https://nodejs-server-royhobbstn.c9users.io/get
     app.post("/get", function (req, res) {
 
         // ['08031', '08005']
@@ -48,28 +48,14 @@ var appRouter = function (app) {
         console.log(paths); // [ '002/050/08', '001/050/08' ]
 
         const returnedData = paths.map(path => {
-            return getParsedExpression(path, geoids, expression);
+            return getParsedExpression(path, geoids, fields, expression);
         });
 
-        // TODO create function that returns parsed expression data:
-        // should be run forEach path
-        // send all geoids... the individual files will only send information that applies to their particular geoids
-
-        function getParsedExpression(path, geoids, expression) {
-            //
-        }
-
-
-        return res.send('done');
-
-        getS3Data('106/040/00.json')
-            .then(data => {
-                return res.json(data);
-            })
-            .catch(err => {
-                return res.send(err);
-            });
-
+        Promise.all(returnedData).then(results => {
+            return res.json(results);
+        }).catch(err => {
+            return res.status(500).send(err);
+        });
 
     });
 
@@ -152,7 +138,48 @@ function getSeqNumFromExpression(expression) {
 
     const tables = fields.map(d => {
         return d.slice(0, 6);
-    })
+    });
 
     return tables;
+}
+
+
+// an AWS Lambda function
+
+function getParsedExpression(path, geoids, fields, expression) {
+    //
+    return new Promise((resolve, reject) => {
+        //
+        const sumlev = path.split('/')[1];
+
+        const Parser = require('expr-eval').Parser;
+        const parser = new Parser();
+        const expr = parser.parse(expression.join(""));
+
+        getS3Data(path + '.json')
+            .then(data => {
+
+                const evaluated = {};
+
+                geoids.forEach(geo_part => {
+                    const full_geoid = `${sumlev}00US${geo_part}`;
+
+                    // not all geoids will be in each file.
+                    // if they aren't here, their value will be undefined
+                    if (data[full_geoid] !== undefined) {
+                        const obj = {};
+                        fields.forEach(field => {
+                            obj[field] = parseFloat(data[full_geoid][field]);
+                        });
+                        evaluated[full_geoid] = expr.evaluate(obj);
+                    }
+                });
+
+                resolve(evaluated);
+            })
+            .catch(err => {
+                reject(err);
+            });
+    });
+
 }
