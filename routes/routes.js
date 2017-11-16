@@ -52,7 +52,8 @@ var appRouter = function (app) {
         });
 
         Promise.all(returnedData).then(results => {
-            return res.json(results);
+            // reduce to single object
+            return res.json(Object.assign({}, ...results));
         }).catch(err => {
             return res.status(500).send(err);
         });

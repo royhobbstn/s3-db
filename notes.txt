@@ -44,24 +44,27 @@ blocks - id, attribute value - that's it.
  - we'll run out of memory quickly
  - if we keep to one table, we can offload the expression calculation to the micro-serverless function
  - and send only the calculated attribute back to main
+ 
+ 
+How does multicounty compare to loading all BGs in the State in One State File?
+    - What about for Blocks?  Still necessary for Blocks?  What about 1.5GB memory limit?
 
     ------------------------
 
 To Build
 
-Test more complicated expressions.
+Figure out how to handle MOE files
 
-Load all Colorado
-
-Test Multi-County BG datasets
-
-How does multicounty compare to loading all BGs in the State in One State File?
-    - What about for Blocks?  Still necessary for Blocks?  What about 1.5GB memory limit?
+Load all data files: use delaware and nebraska
 
 
-Deploy to Lambda    
-    
-Cloudfront in front of S3.
+
+Load all data.
+
+Deploy functions to Lambda    
+
+
     
 The Map
     
+Cloudfront in front of S3.
