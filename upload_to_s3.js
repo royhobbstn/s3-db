@@ -20,7 +20,7 @@ fs.readdir(folder, (err, files) => {
 
     // filter out margin of error files
     const estimate_files = files.filter(file => {
-        return file.includes('eseq001') || file.includes('eseq002');
+        return file.includes('eseq001') || file.includes('eseq002') || file.includes('mseq001') || file.includes('mseq002');
     });
 
 
@@ -102,7 +102,7 @@ function parseFile(file_data, file) {
                 const geoid = results.data[0].GEOID;
                 const statecounty = `${results.data[0].STATE}${results.data[0].COUNTY}`;
                 const state = results.data[0].STATE;
-                const sequence = file.split('.')[0].slice(-3);
+                const sequence = file.slice(0, 1) + file.split('.')[0].slice(-3);
 
                 let aggregator;
 
@@ -156,7 +156,7 @@ function putObject(key, value) {
                 return reject(err);
             }
             else {
-                console.log("Successfully uploaded data to myBucket/myKey");
+                console.log(`Successfully uploaded data to ${key}`);
                 console.log(data);
                 return resolve(data);
             }

@@ -25,7 +25,7 @@ var appRouter = function (app) {
         const fields = Array.from(new Set(getFieldsFromExpression(expression)));
         const table_list = getSeqNumFromExpression(expression);
         const raw_seq_list = table_list.map(d => {
-            return table2seq[d];
+            return `e${table2seq[d]}`;
         });
         const seq_list = Array.from(new Set(raw_seq_list));
         if (seq_list.length > 1) {
