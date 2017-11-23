@@ -25,6 +25,7 @@
     "expr-eval": "^1.2.0",
     "express": "^4.16.2",
     "papaparse": "^4.3.6",
+    "request": "^2.83.0",
     "yargs": "^10.0.3"
   },
   "devDependencies": {

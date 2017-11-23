@@ -2,15 +2,53 @@
 
 const argv = require('yargs').argv;
 const states = require('./modules/states');
+const Promise = require('bluebird');
+const request = require('request');
+const fs = require('fs');
 
-console.log(`Selected: ${argv._}`);
-console.log(argv._);
-console.log(argv);
 
 // if no states entered as parameters, use all states
 const loop_states = argv._.length ? argv._ : Object.keys(states);
 
-console.log(loop_states);
+console.log(`Selected: ${loop_states}`);
+
+// selected states array into array of objects to facilitate downloading multiple files
+let selected_states = [];
+loop_states.forEach(state => {
+    selected_states.push({ state, isTractBGFile: true });
+    selected_states.push({ state, isTractBGFile: false });
+});
+
+// run up to 5 downloads concurrently
+Promise.map(selected_states, function (state) {
+    return requestAndSaveStateFileFromACS(state.state, state.isTractBGFile);
+}, { concurrency: 5 }).then(d => {
+    console.log(`downloaded: ${d.length} files from Census.`);
+    console.log("Finished");
+}).catch(err => {
+    console.log(err);
+    process.exit(); // exit immediately upon error
+});
+
+
+
+function requestAndSaveStateFileFromACS(abbr, isTractBGFile) {
+    return new Promise((resolve, reject) => {
+        var fileName = states[abbr];
+        var fileUrl = isTractBGFile ? `https://www2.census.gov/programs-surveys/acs/summary_file/2015/data/5_year_by_state/${fileName}_Tracts_Block_Groups_Only.zip` :
+            `https://www2.census.gov/programs-surveys/acs/summary_file/2015/data/5_year_by_state/${fileName}_All_Geographies_Not_Tracts_Block_Groups.zip`;
+        var output = isTractBGFile ? `${states[abbr]}_Tracts_Block_Groups_Only.zip` : `${states[abbr]}_All_Geographies_Not_Tracts_Block_Groups.zip`;
+        request({ url: fileUrl, encoding: null }, function (err, resp, body) {
+            if (err) { return reject(err); }
+            fs.writeFile(output, body, function (err) {
+                if (err) { return reject(err); }
+                console.log(`${fileName} written!`);
+                resolve(`${fileName} written!`);
+            });
+        });
+    });
+}
+
 
 
 
