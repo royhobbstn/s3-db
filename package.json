@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/royhobbstn/s3-db#readme",
   "dependencies": {
+    "adm-zip": "^0.4.7",
     "aws-sdk": "^2.149.0",
     "bluebird": "^3.5.1",
     "body-parser": "^1.18.2",
@@ -26,6 +27,7 @@
     "express": "^4.16.2",
     "papaparse": "^4.3.6",
     "request": "^2.83.0",
+    "unzip": "^0.1.11",
     "yargs": "^10.0.3"
   },
   "devDependencies": {

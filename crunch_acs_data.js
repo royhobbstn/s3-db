@@ -5,7 +5,7 @@ const states = require('./modules/states');
 const Promise = require('bluebird');
 const request = require('request');
 const fs = require('fs');
-
+const unzip = require('unzip');
 
 // if no states entered as parameters, use all states
 const loop_states = argv._.length ? argv._ : Object.keys(states);
@@ -18,6 +18,8 @@ loop_states.forEach(state => {
     selected_states.push({ state, isTractBGFile: true });
     selected_states.push({ state, isTractBGFile: false });
 });
+
+// TODO logic to make directories
 
 // run up to 5 downloads concurrently
 Promise.map(selected_states, function (state) {
@@ -34,16 +36,30 @@ Promise.map(selected_states, function (state) {
 
 function requestAndSaveStateFileFromACS(abbr, isTractBGFile) {
     return new Promise((resolve, reject) => {
-        var fileName = states[abbr];
-        var fileUrl = isTractBGFile ? `https://www2.census.gov/programs-surveys/acs/summary_file/2015/data/5_year_by_state/${fileName}_Tracts_Block_Groups_Only.zip` :
-            `https://www2.census.gov/programs-surveys/acs/summary_file/2015/data/5_year_by_state/${fileName}_All_Geographies_Not_Tracts_Block_Groups.zip`;
-        var output = isTractBGFile ? `${states[abbr]}_Tracts_Block_Groups_Only.zip` : `${states[abbr]}_All_Geographies_Not_Tracts_Block_Groups.zip`;
+        const fileName = states[abbr];
+        const fileType = isTractBGFile ? '_Tracts_Block_Groups_Only' : '_All_Geographies_Not_Tracts_Block_Groups';
+        const outputDir = isTractBGFile ? 'CensusDL/group1/' : 'CensusDL/group2/';
+        const fileUrl = `https://www2.census.gov/programs-surveys/acs/summary_file/2015/data/5_year_by_state/${fileName}${fileType}.zip`;
+        const outputFile = `${states[abbr]}${fileType}.zip`;
+
+        console.log(`downloading ${fileName}${fileType}.zip`);
         request({ url: fileUrl, encoding: null }, function (err, resp, body) {
             if (err) { return reject(err); }
-            fs.writeFile(output, body, function (err) {
+            fs.writeFile(`${outputDir}${outputFile}`, body, function (err) {
                 if (err) { return reject(err); }
-                console.log(`${fileName} written!`);
-                resolve(`${fileName} written!`);
+                console.log(`${outputFile} written!`);
+
+                // unzip
+                const stream = fs.createReadStream(`${outputDir}${outputFile}`);
+                stream.pipe(unzip.Extract({ path: `${outputDir}_unzipped` })
+                    .on('close', function () {
+                        console.log(`${outputFile} unzipped!`);
+                        resolve('done unzip');
+                    })
+                    .on('error', function (err) {
+                        reject(err);
+                    })
+                );
             });
         });
     });
@@ -53,21 +69,6 @@ function requestAndSaveStateFileFromACS(abbr, isTractBGFile) {
 
 
 /*
-
-
-for var in $loopstates
-do
-    echo "$var"
-    echo "downloading $var all geo not tracts and bgs"
-    curl --progress-bar https://www2.census.gov/programs-surveys/acs/summary_file/2015/data/5_year_by_state/${states[$var]}_All_Geographies_Not_Tracts_Block_Groups.zip -O
-    echo "downloading $var all tracts and bgs"
-    curl --progress-bar https://www2.census.gov/programs-surveys/acs/summary_file/2015/data/5_year_by_state/${states[$var]}_Tracts_Block_Groups_Only.zip -O
-    echo "unzipping $var all geo not tracts and bgs"
-    unzip -qq ${states[$var]}_All_Geographies_Not_Tracts_Block_Groups.zip -d group1
-    echo "unzipping $var all tracts and bgs"
-    unzip -qq ${states[$var]}_Tracts_Block_Groups_Only.zip -d group2
-done
-
 
 echo "creating temporary directories"
 mkdir staged
