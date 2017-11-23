@@ -53,16 +53,13 @@ How does multicounty compare to loading all BGs in the State in One State File?
 
 To Build
 
-Figure out how to handle MOE files
+- have data co and wy
 
-Load all data files: use delaware and nebraska
+Deploy functions to Lambda (us west oregon)
 
+Complex test queries & moe queries
 
-
-Load all data.
-
-Deploy functions to Lambda    
-
+Load all data. (from an ec2 in us west oregon)
 
     
 The Map

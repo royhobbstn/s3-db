@@ -18,12 +18,6 @@ fs.readdir(folder, (err, files) => {
         process.exit();
     }
 
-    // filter out margin of error files
-    const estimate_files = files.filter(file => {
-        return file.includes('eseq001') || file.includes('eseq002') || file.includes('mseq001') || file.includes('mseq002');
-    });
-
-
     // https://codeburst.io/javascript-async-await-with-foreach-b6ba62bbf404
     const asyncForEach = async(array, callback) => {
         for (let index = 0; index < array.length; index++) {
@@ -33,7 +27,7 @@ fs.readdir(folder, (err, files) => {
 
     // parse estimate files
     const start = async() => {
-        await asyncForEach(estimate_files, async(file) => {
+        await asyncForEach(files, async(file) => {
             console.log(`reading: ${file}`);
             const file_data = fs.readFileSync(path.join(__dirname, `acs_temp_cproj/ready/${file}`), { encoding: 'binary' });
             console.log(`parsing: ${file}`);
@@ -85,7 +79,9 @@ function parseFile(file_data, file) {
 
                 if (results.errors.length) {
                     console.log('E: ', results.errors);
-                    // TODO reject for error
+                    // TODO ending blank line causing issues
+                    reject(results.errors);
+                    process.exit();
                 }
 
                 // only tracts, bg, county, place, state right now

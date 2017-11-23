@@ -1,27 +1,20 @@
-#!/bin/bash
+#!/usr/bin/env node
+
+const argv = require('yargs').argv;
+const states = require('./modules/states');
+
+console.log(`Selected: ${argv._}`);
+console.log(argv._);
+console.log(argv);
+
+// if no states entered as parameters, use all states
+const loop_states = argv._.length ? argv._ : Object.keys(states);
+
+console.log(loop_states);
 
 
-dir=$(pwd)
-LOG_FILE="$dir/acs1115_logfile.txt"
-exec > >(tee -a ${LOG_FILE} )
-exec 2> >(tee -a ${LOG_FILE} >&2)
 
-
-starttime="start: `date +"%T"`"
-
-mkdir acs_temp_cproj
-cd acs_temp_cproj
-
-declare -A states; states[al]=Alabama; states[ak]=Alaska; states[az]=Arizona; states[ar]=Arkansas; states[ca]=California; states[co]=Colorado; states[ct]=Connecticut; states[de]=Delaware; states[dc]=DistrictOfColumbia; states[fl]=Florida; states[ga]=Georgia; states[hi]=Hawaii; states[id]=Idaho; states[il]=Illinois; states[in]=Indiana; states[ia]=Iowa; states[ks]=Kansas; states[ky]=Kentucky; states[la]=Louisiana; states[me]=Maine; states[md]=Maryland; states[ma]=Massachusetts; states[mi]=Michigan; states[mn]=Minnesota; states[ms]=Mississippi; states[mo]=Missouri; states[mt]=Montana; states[ne]=Nebraska; states[nv]=Nevada; states[nh]=NewHampshire; states[nj]=NewJersey; states[nm]=NewMexico; states[ny]=NewYork; states[nc]=NorthCarolina; states[nd]=NorthDakota; states[oh]=Ohio; states[ok]=Oklahoma; states[or]=Oregon; states[pa]=Pennsylvania; states[pr]=PuertoRico; states[ri]=RhodeIsland; states[sc]=SouthCarolina; states[sd]=SouthDakota; states[tn]=Tennessee; states[tx]=Texas; states[us]=UnitedStates; states[ut]=Utah; states[vt]=Vermont; states[va]=Virginia; states[wa]=Washington; states[wv]=WestVirginia; states[wi]=Wisconsin; states[wy]=Wyoming;
-
-
-numberargs=$#
-loopstates="$@"
-
-if [ $# -eq 0 ]
-then 
-loopstates=${!states[@]};
-fi
+/*
 
 
 for var in $loopstates
@@ -146,3 +139,5 @@ for file in *.csv; do perl -i -pe 'chomp if eof' $file; done;
 
 echo "done"
 # files we need are in ready folder
+
+*/
