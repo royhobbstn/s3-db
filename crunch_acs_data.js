@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+// TODO combine group1 and group2 before being joined to geo?
+// TODO test multiple states
+// TODO add error catchers to csv stream parsing
+
 const argv = require('yargs').argv;
 const states = require('./modules/states');
 const Promise = require('bluebird');
@@ -8,6 +12,7 @@ const fs = require('fs');
 const unzip = require('unzip');
 const csv = require('csvtojson');
 const rimraf = require('rimraf');
+const json2csv = require('json2csv');
 
 const geography_file_headers = ["FILEID", "STUSAB", "SUMLEVEL", "COMPONENT", "LOGRECNO", "US",
                 "REGION", "DIVISION", "STATECE", "STATE", "COUNTY", "COUSUB", "PLACE", "TRACT", "BLKGRP", "CONCIT",
@@ -47,11 +52,13 @@ readyWorkspace()
     })
     .then(d => {
         console.log(`downloaded: ${d.length} files from Census.`);
-        console.log("Finished");
-        return combineGeoWithData('./CensusDL/group1/_unzipped');
+        console.log("converting tracts and block groups to csv");
+        return combineGeoWithData('./CensusDL/group1/_unzipped', 'group1');
     }).then(() => {
-        // TODO return combineGeoWithData('./CensusDL/group2/_unzipped');
-        console.log('now done');
+        console.log('converting all other geographies to csv')
+        return combineGeoWithData('./CensusDL/group2/_unzipped', 'group2');
+    }).then(() => {
+        console.log('all files de-normalized and converted to csv');
     }).catch(err => {
         console.log(err);
         process.exit(); // exit immediately upon error
@@ -104,7 +111,8 @@ function readyWorkspace() {
             }
 
             // logic to set up directories
-            const directories_in_order = ['./CensusDL', './CensusDL/group1', './CensusDL/group2'];
+            const directories_in_order = ['./CensusDL', './CensusDL/group1',
+            './CensusDL/group2', './CensusDL/group1ready', './CensusDL/group2ready'];
 
             directories_in_order.forEach(dir => {
                 if (!fs.existsSync(dir)) {
@@ -118,7 +126,7 @@ function readyWorkspace() {
     });
 }
 
-function combineGeoWithData(dirname) {
+function combineGeoWithData(dirname, group) {
     return new Promise((resolve, reject) => {
 
         // read unzipped directory - find geog csv files
@@ -134,7 +142,7 @@ function combineGeoWithData(dirname) {
             });
 
             const geo_done = Promise.map(geo_files, file => {
-                return getStateGeofileJSON(dirname, file);
+                return getStateGeofileJSON(dirname, file, group);
             }, { concurrency: 1 });
 
             Promise.all(geo_done).then(() => {
@@ -144,15 +152,10 @@ function combineGeoWithData(dirname) {
 
         });
 
-
-        // find all txt files that match pattern of current geog file
-
-        // stream each text file - add geo fields to each, write out to disk
-
     });
 }
 
-function getStateGeofileJSON(dirname, geofile) {
+function getStateGeofileJSON(dirname, geofile, group) {
     return new Promise((resolve, reject) => {
         fs.readFile(`${dirname}/${geofile}`, 'utf-8', function (err, content) {
             if (err) {
@@ -182,40 +185,19 @@ function getStateGeofileJSON(dirname, geofile) {
                         return (extension === 'txt' && name.includes(file_state_pattern) && not_geog_file);
                     });
 
-                    let count = 0;
-
-                    txt_files.forEach(file => {
-
+                    const txts = Promise.map(txt_files, file => {
                         const content = fs.readFileSync(`${dirname}/${file}`, 'utf-8');
                         const seq = file.split('.')[0].slice(9, -3); // e20155de0001000.txt
 
-                        csv({ noheader: true, headers: schemas[seq] })
-                            .fromString(content)
-                            .on('csv', (csvRow) => { // this func will be called 3 times
-                                // console.log(csvRow) // => [1,2,3] , [4,5,6]  , [7,8,9]
-                            })
-                            .transf((jsonObj, csvRow, index) => {
-                                // mutate json obj
-                                const linked_record = obj[jsonObj.STUSAB + jsonObj.LOGRECNO];
-                                geography_file_headers.forEach(header => {
-                                    jsonObj[header] = linked_record[header];
-                                });
-                            })
-                            .on('end_parsed', data => {
-                                // TODO write to csv file
-                            })
-                            .on('done', () => {
-                                //parsing finished
-                                console.log('finished ' + file);
-                                count++;
+                        return parseTxtCSVs(obj, seq, content, file, group);
 
-                                // all 122 estimate and moe files finished
-                                if (count === 244) {
-                                    resolve(true);
-                                }
-                            });
+                    }, { concurrency: 1 });
+
+                    Promise.all(txts).then(() => {
+                        resolve(true);
+                    }).catch(err => {
+                        reject(err);
                     });
-
 
                 })
                 .on('done', () => {
@@ -226,6 +208,35 @@ function getStateGeofileJSON(dirname, geofile) {
     });
 }
 
+function parseTxtCSVs(obj, seq, content, file, group) {
+    //
+    return new Promise((resolve, reject) => {
+        csv({ noheader: true, headers: schemas[seq] })
+            .fromString(content)
+            .transf((jsonObj, csvRow, index) => {
+                // mutate json obj
+                const linked_record = obj[jsonObj.STUSAB + jsonObj.LOGRECNO];
+                geography_file_headers.forEach(header => {
+                    jsonObj[header] = linked_record[header];
+                });
+            })
+            .on('end_parsed', data => {
+                try {
+                    const result = json2csv({ data });
+                    const filename_csv = file.split('.')[0] + '.csv';
+                    console.log(`saving ${filename_csv}`);
+                    fs.writeFileSync(`./CensusDL/${group}ready/${filename_csv}`, result, 'utf8');
+                }
+                catch (err) {
+                    console.error(err);
+                }
+            })
+            .on('done', () => {
+                resolve(true);
+            });
+    });
+
+}
 
 function requestAndSaveStateFileFromACS(abbr, isTractBGFile) {
     return new Promise((resolve, reject) => {
@@ -257,119 +268,3 @@ function requestAndSaveStateFileFromACS(abbr, isTractBGFile) {
         });
     });
 }
-
-
-
-
-/*
-
-echo "creating temporary directories"
-mkdir staged
-mkdir combined
-mkdir sorted
-
-mkdir geostaged
-mkdir geocombined
-mkdir geosorted
-
-mkdir joined
-
-echo "processing all files: not tracts and bgs"
-cd group1
-for file in *20155**0***000.txt ; do mv $file ${file//.txt/a.csv} ; done
-for i in *20155**0***000*.csv; do echo "writing p_$i"; while IFS=, read f1 f2 f3 f4 f5 f6; do echo "$f3$f6,"; done < $i > p_$i; done
-mv p_* ../staged/
-
-echo "processing all files: tracts and bgs"
-cd ../group2
-for file in *20155**0***000.txt ; do mv $file ${file//.txt/b.csv} ; done
-for i in *20155**0***000*.csv; do echo "writing p_$i"; while IFS=, read f1 f2 f3 f4 f5 f6; do echo "$f3$f6,"; done < $i > p_$i; done
-mv p_* ../staged/
-
-
-cd ../staged
-echo "combining tract and bg files with all other geographies: estimates"
-for i in $(seq -f "%03g" 1 122); do cat p_e20155**0"$i"000*.csv >> eseq"$i".csv; done;
-echo "combining tract and bg files with all other geographies: margin of error"
-for i in $(seq -f "%03g" 1 122); do cat p_m20155**0"$i"000*.csv >> mseq"$i".csv; done;
-mv *seq* ../combined/
-
-cd ../combined
-
-echo "replacing suppressed fields with null"
-for file in *.csv; do perl -pi -e 's/\.,/,/g' $file; done;
-
-for file in *.csv; do echo "sorting $file"; sort $file > ../sorted/$file; done;
-
-echo "creating geography key file"
-cd ../group1
-for file in g20155**.csv; do mv $file ../geostaged/$file; done;
-
-cd ../geostaged
-for file in *.csv; do cat $file >> ../geocombined/geo_concat.csv; done;
-
-cd ../geocombined
-awk -F "\"*,\"*" '{print $2 $5}' geo_concat.csv > geo_key.csv
-tr A-Z a-z < geo_key.csv > geo_key_lowercase.csv
-paste -d , geo_key_lowercase.csv geo_concat.csv > acs_geo_2015.csv
-sort acs_geo_2015.csv > ../geosorted/acs_geo_2015.csv
-
-cd ../sorted
-for file in *.csv; do echo "joining $file with geography"; join -t , -1 1 -2 1 ../geosorted/acs_geo_2015.csv ./$file > ../joined/$file; done;
-
-echo "files joined"
-
-cd ../joined
-
-for file in *.csv; do sed -i 's/,$//' $file; done;
-
-echo "removed trailing comma csv"
-
-cd ..
-
-mkdir schemas
-
-echo "downloading master column list"
-curl --progress-bar https://www2.census.gov/programs-surveys/acs/summary_file/2015/documentation/user_tools/ACS_5yr_Seq_Table_Number_Lookup.txt -O
-
-echo "creating schema files"
-
-# remove first line
-sed 1d ACS_5yr_Seq_Table_Number_Lookup.txt > no_header.csv
-
-# only copy actual column entries - no metadata
-# columns only have integer values in field 4
-awk -F, '$4 ~ /^[0-9]+$/' no_header.csv > columns_list.csv
-
-# create a schema file for each sequence file.  kickstart it with geography fields
-n=122;for i in $(seq -f "%04g" ${n});do echo -n "KEY,FILEID,STUSAB,SUMLEVEL,COMPONENT,LOGRECNO,US,REGION,DIVISION,STATECE,STATE,COUNTY,COUSUB,PLACE,TRACT,BLKGRP,CONCIT,AIANHH,AIANHHFP,AIHHTLI,AITSCE,AITS,ANRC,CBSA,CSA,METDIV,MACC,MEMI,NECTA,CNECTA,NECTADIV,UA,BLANK1,CDCURR,SLDU,SLDL,BLANK2,BLANK3,ZCTA5,SUBMCD,SDELM,SDSEC,SDUNI,UR,PCI,BLANK4,BLANK5,PUMA5,BLANK6,GEOID,NAME,BTTR,BTBG,BLANK7" > "./schemas/schema$i.txt"; done;
-
-# loop through master column list, add each valid column to its schema file as type float
-while IFS=',' read f1 f2 f3 f4 f5; do echo -n ","`printf $f2`"_"`printf %03d $f4` >> "./schemas/schema$f3.txt"; done < columns_list.csv;
-
-cd schemas
-
-for file in *.txt; do sed -i -e '$a\' $file; done;
-
-echo "schema files created"
-
-cd ..
-
-mkdir ready
-
-cd ./joined
-
-echo "prepend file with header"
-# prepend each file with corresponding header
-for file in *.csv; do cat ../schemas/schema0${file:4:3}.txt $file > ../ready/$file; done;
-
-cd ../ready
-
-echo "remove trailing newlines"
-# remove trailing newline to prevent csv parsing warnings in nodejs
-for file in *.csv; do perl -i -pe 'chomp if eof' $file; done;
-
-echo "done"
-# files we need are in ready folder
-
-*/
