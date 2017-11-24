@@ -6,6 +6,15 @@ const Promise = require('bluebird');
 const request = require('request');
 const fs = require('fs');
 const unzip = require('unzip');
+const csv = require('csvtojson');
+const rimraf = require('rimraf');
+
+const geography_file_headers = ["FILEID", "STUSAB", "SUMLEVEL", "COMPONENT", "LOGRECNO", "US",
+                "REGION", "DIVISION", "STATECE", "STATE", "COUNTY", "COUSUB", "PLACE", "TRACT", "BLKGRP", "CONCIT",
+                "AIANHH", "AIANHHFP", "AIHHTLI", "AITSCE", "AITS", "ANRC", "CBSA", "CSA", "METDIV", "MACC", "MEMI",
+                "NECTA", "CNECTA", "NECTADIV", "UA", "BLANK1", "CDCURR", "SLDU", "SLDL", "BLANK2", "BLANK3",
+                "ZCTA5", "SUBMCD", "SDELM", "SDSEC", "SDUNI", "UR", "PCI", "BLANK4", "BLANK5", "PUMA5", "BLANK6",
+                "GEOID", "NAME", "BTTR", "BTBG", "BLANK7"];
 
 // if no states entered as parameters, use all states
 const loop_states = argv._.length ? argv._ : Object.keys(states);
@@ -19,19 +28,203 @@ loop_states.forEach(state => {
     selected_states.push({ state, isTractBGFile: false });
 });
 
-// TODO logic to make directories
+
+// main
+
+// object with field names for each seq
+let schemas;
 
 // run up to 5 downloads concurrently
-Promise.map(selected_states, function (state) {
-    return requestAndSaveStateFileFromACS(state.state, state.isTractBGFile);
-}, { concurrency: 5 }).then(d => {
-    console.log(`downloaded: ${d.length} files from Census.`);
-    console.log("Finished");
-}).catch(err => {
-    console.log(err);
-    process.exit(); // exit immediately upon error
-});
+readyWorkspace()
+    .then(() => {
+        return createSchemaFiles();
+    })
+    .then((schema_obj) => {
+        schemas = schema_obj;
+        return Promise.map(selected_states, state => {
+            return requestAndSaveStateFileFromACS(state.state, state.isTractBGFile);
+        }, { concurrency: 5 });
+    })
+    .then(d => {
+        console.log(`downloaded: ${d.length} files from Census.`);
+        console.log("Finished");
+        return combineGeoWithData('./CensusDL/group1/_unzipped');
+    }).then(() => {
+        // TODO return combineGeoWithData('./CensusDL/group2/_unzipped');
+        console.log('now done');
+    }).catch(err => {
+        console.log(err);
+        process.exit(); // exit immediately upon error
+    });
 
+function createSchemaFiles() {
+    return new Promise((resolve, reject) => {
+
+        const url = 'https://www2.census.gov/programs-surveys/acs/summary_file/2015/documentation/user_tools/ACS_5yr_Seq_Table_Number_Lookup.txt';
+        request(url, function (err, resp, body) {
+            if (err) { return reject(err); }
+
+            csv({ noheader: false })
+                .fromString(body)
+                .on('end_parsed', data => {
+
+                    const fields = {};
+                    // filter out line number if non-integer value
+                    data.forEach(d => {
+                        const line_number = Number(d['Line Number']);
+                        if (Number.isInteger(line_number) && line_number > 0) {
+                            const field_name = d['Table ID'] + String(d['Line Number']).padStart(3, "0");;
+                            const seq_num = d['Sequence Number'].slice(1);
+                            if (fields[seq_num]) {
+                                fields[seq_num].push(field_name);
+                            }
+                            else {
+                                fields[seq_num] = ["FILEID", "FILETYPE", "STUSAB", "CHARITER", "SEQUENCE", "LOGRECNO", field_name];
+                            }
+                        }
+                    });
+
+                    resolve(fields);
+                })
+                .on('done', () => {
+                    //parsing finished
+                    console.log('finished parsing schema file');
+                });
+        });
+    })
+
+}
+
+function readyWorkspace() {
+    return new Promise((resolve, reject) => {
+        // delete ./CensusDL if exists
+        rimraf('./CensusDL', function (err) {
+            if (err) {
+                return reject(err);
+            }
+
+            // logic to set up directories
+            const directories_in_order = ['./CensusDL', './CensusDL/group1', './CensusDL/group2'];
+
+            directories_in_order.forEach(dir => {
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir);
+                }
+            });
+
+            console.log('workspace ready');
+            resolve('done');
+        });
+    });
+}
+
+function combineGeoWithData(dirname) {
+    return new Promise((resolve, reject) => {
+
+        // read unzipped directory - find geog csv files
+        fs.readdir(dirname, function (err, filenames) {
+            if (err) {
+                return reject(err);
+            }
+
+            const geo_files = filenames.filter(function (filename) {
+                // if filename ends with .csv
+                const extension = filename.split('.')[1];
+                return (extension === 'csv');
+            });
+
+            const geo_done = Promise.map(geo_files, file => {
+                return getStateGeofileJSON(dirname, file);
+            }, { concurrency: 1 });
+
+            Promise.all(geo_done).then(() => {
+                console.log('diddy');
+                resolve(true);
+            });
+
+        });
+
+
+        // find all txt files that match pattern of current geog file
+
+        // stream each text file - add geo fields to each, write out to disk
+
+    });
+}
+
+function getStateGeofileJSON(dirname, geofile) {
+    return new Promise((resolve, reject) => {
+        fs.readFile(`${dirname}/${geofile}`, 'utf-8', function (err, content) {
+            if (err) {
+                return reject(err);
+            }
+
+            // convert content to JSON
+            csv({
+                    noheader: true,
+                    headers: geography_file_headers
+                })
+                .fromString(content)
+                .on('end_parsed', data => {
+
+                    // convert to key lookup
+                    const obj = {};
+                    data.forEach(d => {
+                        obj[d.STUSAB.toLowerCase() + d.LOGRECNO] = d;
+                    });
+
+                    const file_state_pattern = geofile.split('.')[0].slice(1);
+                    const files = fs.readdirSync(dirname);
+
+                    const txt_files = files.filter(function (name) {
+                        const extension = name.split('.')[1];
+                        const not_geog_file = (name.length === 19); // exclude geog file
+                        return (extension === 'txt' && name.includes(file_state_pattern) && not_geog_file);
+                    });
+
+                    let count = 0;
+
+                    txt_files.forEach(file => {
+
+                        const content = fs.readFileSync(`${dirname}/${file}`, 'utf-8');
+                        const seq = file.split('.')[0].slice(9, -3); // e20155de0001000.txt
+
+                        csv({ noheader: true, headers: schemas[seq] })
+                            .fromString(content)
+                            .on('csv', (csvRow) => { // this func will be called 3 times
+                                // console.log(csvRow) // => [1,2,3] , [4,5,6]  , [7,8,9]
+                            })
+                            .transf((jsonObj, csvRow, index) => {
+                                // mutate json obj
+                                const linked_record = obj[jsonObj.STUSAB + jsonObj.LOGRECNO];
+                                geography_file_headers.forEach(header => {
+                                    jsonObj[header] = linked_record[header];
+                                });
+                            })
+                            .on('end_parsed', data => {
+                                // TODO write to csv file
+                            })
+                            .on('done', () => {
+                                //parsing finished
+                                console.log('finished ' + file);
+                                count++;
+
+                                // all 122 estimate and moe files finished
+                                if (count === 244) {
+                                    resolve(true);
+                                }
+                            });
+                    });
+
+
+                })
+                .on('done', () => {
+                    // parsing finished
+                });
+
+        });
+    });
+}
 
 
 function requestAndSaveStateFileFromACS(abbr, isTractBGFile) {
