@@ -41,6 +41,8 @@ loop_states.forEach(state => {
 
 // main
 
+// TODO upload resulting large geofile to S3
+
 readyWorkspace()
     .then(() => {
         return Promise.map(selected_states, state => {
@@ -49,11 +51,15 @@ readyWorkspace()
     })
     .then(() => {
         console.log('merging estimate files');
-        return mergeFiles('estimate');
+        return mergeDataFiles('estimate');
     })
     .then(() => {
         console.log('merging moe files');
-        return mergeFiles('moe');
+        return mergeDataFiles('moe');
+    })
+    .then(() => {
+        console.log('merging geo files');
+        return mergeGeoFiles();
     })
     .then(() => {
         console.log('all file merging completed');
@@ -76,11 +82,30 @@ readyWorkspace()
 
 function loadDataToS3(schemas) {
     // TODO convert to JSON and write to S3
+    return true;
+
+}
+
+function mergeGeoFiles() {
+    return new Promise((resolve, reject) => {
+        const command = `awk 'FNR==1 && NR!=1{next;}{print}' ./CensusDL/group1/_unzipped/g20155**.csv > ./CensusDL/geofile/geofile.csv;`;
+        console.log(`running: ${command}`);
+        exec(command, function (error, stdout, stderr) {
+            if (error) {
+                console.log(`error code: ${error.code}`);
+                console.log(`stderr: ${stderr}`);
+                reject(`error: ${error.code} ${stderr}`);
+            }
+            console.log('completed merging geofile.');
+            resolve('completed merging geofile.');
+        });
+    });
 
 }
 
 
-function mergeFiles(file_type) {
+function mergeDataFiles(file_type) {
+    // TODO important: can do standard CONCAT here because no headers
     const typechar = (file_type === 'moe') ? 'm' : 'e';
 
     return new Promise((resolve, reject) => {
@@ -148,7 +173,8 @@ function readyWorkspace() {
 
             // logic to set up directories
             const directories_in_order = ['./CensusDL', './CensusDL/group1',
-            './CensusDL/group2', './CensusDL/group1ready', './CensusDL/group2ready', './CensusDL/ready'];
+            './CensusDL/group2', './CensusDL/group1ready', './CensusDL/group2ready',
+            './CensusDL/ready', './CensusDL/geofile'];
 
             directories_in_order.forEach(dir => {
                 if (!fs.existsSync(dir)) {
