@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-// TODO combine group1 and group2 before being joined to geo?
 // TODO test multiple states
 // TODO add error catchers to csv stream parsing
+// TODO why not directly from file to S3?
 
 const argv = require('yargs').argv;
 const states = require('./modules/states');
@@ -13,6 +13,7 @@ const unzip = require('unzip');
 const csv = require('csvtojson');
 const rimraf = require('rimraf');
 const json2csv = require('json2csv');
+const exec = require('child_process').exec;
 
 const geography_file_headers = ["FILEID", "STUSAB", "SUMLEVEL", "COMPONENT", "LOGRECNO", "US",
                 "REGION", "DIVISION", "STATECE", "STATE", "COUNTY", "COUSUB", "PLACE", "TRACT", "BLKGRP", "CONCIT",
@@ -39,7 +40,6 @@ loop_states.forEach(state => {
 // object with field names for each seq
 let schemas;
 
-// run up to 5 downloads concurrently
 readyWorkspace()
     .then(() => {
         return createSchemaFiles();
@@ -55,14 +55,39 @@ readyWorkspace()
         console.log("converting tracts and block groups to csv");
         return combineGeoWithData('./CensusDL/group1/_unzipped', 'group1');
     }).then(() => {
-        console.log('converting all other geographies to csv')
+        console.log('converting all other geographies to csv');
         return combineGeoWithData('./CensusDL/group2/_unzipped', 'group2');
     }).then(() => {
-        console.log('all files de-normalized and converted to csv');
+        mergeFiles('estimate');
+        console.log('all estimate files de-normalized and converted to csv');
+    }).then(() => {
+        mergeFiles('moe');
+        console.log('all moe files de-normalized and converted to csv');
+        console.log('program complete');
     }).catch(err => {
         console.log(err);
         process.exit(); // exit immediately upon error
     });
+
+
+
+function mergeFiles(file_type) {
+    const typechar = (file_type === 'moe') ? 'm' : 'e';
+
+    return new Promise((resolve, reject) => {
+        const command = `for i in $(seq -f "%03g" 1 122); do awk 'FNR==1 && NR!=1{next;}{print}' ./CensusDL/group1ready/${typechar}20155**0"$i"000*.csv ./CensusDL/group2ready/${typechar}20155**0"$i"000*.csv > ./CensusDL/ready/${typechar}seq"$i".csv; done;`;
+        console.log(`running: ${command}`);
+        exec(command, function (error, stdout, stderr) {
+            if (error) {
+                console.log(`error code: ${error.code}`);
+                console.log(`stderr: ${stderr}`);
+                reject(`error: ${error.code} ${stderr}`);
+            }
+            console.log('completed merging files.');
+            resolve('completed merging');
+        });
+    });
+}
 
 function createSchemaFiles() {
     return new Promise((resolve, reject) => {
@@ -112,7 +137,7 @@ function readyWorkspace() {
 
             // logic to set up directories
             const directories_in_order = ['./CensusDL', './CensusDL/group1',
-            './CensusDL/group2', './CensusDL/group1ready', './CensusDL/group2ready'];
+            './CensusDL/group2', './CensusDL/group1ready', './CensusDL/group2ready', './CensusDL/ready'];
 
             directories_in_order.forEach(dir => {
                 if (!fs.existsSync(dir)) {

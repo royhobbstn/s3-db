@@ -8,7 +8,7 @@ const AWS = require('aws-sdk');
 
 const s3 = new AWS.S3();
 const myBucket = 's3db-acs1115';
-const folder = path.join(__dirname, 'acs_temp_cproj/ready/');
+const folder = path.join(__dirname, './CensusDL/ready/');
 
 
 // loop through all sequence files
@@ -29,7 +29,7 @@ fs.readdir(folder, (err, files) => {
     const start = async() => {
         await asyncForEach(files, async(file) => {
             console.log(`reading: ${file}`);
-            const file_data = fs.readFileSync(path.join(__dirname, `acs_temp_cproj/ready/${file}`), { encoding: 'binary' });
+            const file_data = fs.readFileSync(path.join(__dirname, `./CensusDL/ready/${file}`), { encoding: 'binary' });
             console.log(`parsing: ${file}`);
             await parseFile(file_data, file);
             console.log(`done with: ${file}`);
@@ -48,6 +48,7 @@ function parseFile(file_data, file) {
 
         Papa.parse(file_data, {
             header: true,
+            skipEmptyLines: true,
             complete: function () {
 
                 let put_object_array = [];
@@ -78,8 +79,8 @@ function parseFile(file_data, file) {
             step: function (results) {
 
                 if (results.errors.length) {
+                    console.log(results);
                     console.log('E: ', results.errors);
-                    // TODO ending blank line causing issues
                     reject(results.errors);
                     process.exit();
                 }
