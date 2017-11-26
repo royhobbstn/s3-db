@@ -1,13 +1,5 @@
 #!/usr/bin/env node
 
-// geography all merged together, saved as single CSV file
-// geography loaded / immediately converted to key-val lookup on Lambda or Elasticache
-
-// csv data files combined by seq/moe parsed to json and immediately uploaded to s3
-
-// retrieval will go from tile geo -> geoLambda (single) -> dataLambda (multiple)
-
-
 const argv = require('yargs').argv;
 const states = require('./modules/states');
 const Promise = require('bluebird');
@@ -16,8 +8,12 @@ const fs = require('fs');
 const unzip = require('unzip');
 const csv = require('csvtojson');
 const rimraf = require('rimraf');
-const json2csv = require('json2csv');
 const exec = require('child_process').exec;
+const AWS = require('aws-sdk');
+const s3 = new AWS.S3();
+const path = require('path');
+const Papa = require('papaparse');
+
 
 const geography_file_headers = ["FILEID", "STUSAB", "SUMLEVEL", "COMPONENT", "LOGRECNO", "US",
                 "REGION", "DIVISION", "STATECE", "STATE", "COUNTY", "COUSUB", "PLACE", "TRACT", "BLKGRP", "CONCIT",
@@ -40,8 +36,6 @@ loop_states.forEach(state => {
 
 
 // main
-
-// TODO upload resulting large geofile to S3
 
 readyWorkspace()
     .then(() => {
@@ -66,7 +60,14 @@ readyWorkspace()
         return createSchemaFiles();
     })
     .then(schemas => {
-        return loadDataToS3(schemas);
+        return parseGeofile(schemas);
+    })
+    .then(arr => {
+        return loadDataToS3(arr);
+    })
+    .then(() => {
+        // TODO - not even necessary anymore
+        return loadGeoToS3();
     })
     .then(() => {
         console.log('program complete');
@@ -80,15 +81,257 @@ readyWorkspace()
 /**************************/
 
 
-function loadDataToS3(schemas) {
-    // TODO convert to JSON and write to S3
-    return true;
+
+function loadDataToS3(arr) {
+    const schemas = arr[0];
+    const keyed_lookup = arr[1];
+
+    const folder = path.join(__dirname, './CensusDL/ready/');
+
+    // loop through all sequence files
+    fs.readdir(folder, (err, files) => {
+        if (err) {
+            console.log('error: ', err);
+            process.exit();
+        }
+
+        // https://codeburst.io/javascript-async-await-with-foreach-b6ba62bbf404
+        const asyncForEach = async(array, callback) => {
+            for (let index = 0; index < array.length; index++) {
+                await callback(array[index], index, array);
+            }
+        };
+
+        // parse estimate files
+        const start = async() => {
+            await asyncForEach(files, async(file) => {
+                console.log(`reading: ${file}`);
+                const file_data = fs.readFileSync(path.join(__dirname, `./CensusDL/ready/${file}`), { encoding: 'binary' });
+                console.log(`parsing: ${file}`);
+                await parseFile(file_data, file, schemas, keyed_lookup);
+                console.log(`done with: ${file}`);
+            });
+            console.log('Done');
+        };
+
+        start();
+
+    });
 
 }
 
+
+
+function parseFile(file_data, file, schemas, keyed_lookup) {
+    return new Promise((resolve, reject) => {
+        const data_cache = {};
+
+        Papa.parse(file_data, {
+            header: false,
+            skipEmptyLines: true,
+            complete: function () {
+
+                let put_object_array = [];
+
+                Object.keys(data_cache).forEach(sequence => {
+                    Object.keys(data_cache[sequence]).forEach(sumlev => {
+                        Object.keys(data_cache[sequence][sumlev]).forEach(aggregator => {
+                            const filename = `${sequence}/${sumlev}/${aggregator}.json`;
+                            console.log(`insert: ${filename}`);
+                            const data = data_cache[sequence][sumlev][aggregator];
+                            put_object_array.push({ filename, data });
+                        });
+                    });
+                });
+
+                // run up to 5 AWS PutObject calls concurrently
+                Promise.map(put_object_array, function (obj) {
+                    return putObject(obj.filename, obj.data);
+                }, { concurrency: 5 }).then(d => {
+                    console.log(`inserted: ${d.length} objects into S3`);
+                    console.log("Finished");
+                    resolve(`finished: ${file}`);
+                }).catch(err => {
+                    reject(err);
+                });
+
+            },
+            step: function (results) {
+
+                if (results.errors.length) {
+                    console.log(results);
+                    console.log('E: ', results.errors);
+                    reject(results.errors);
+                    process.exit();
+                }
+
+                const seq_string = file.split('.')[0].slice(-3);
+                const seq_fields = schemas[seq_string];
+
+                const keyed = {};
+                results.data[0].forEach((d, i) => {
+                    keyed[seq_fields[i]] = d;
+                });
+
+                // combine with geo on stustab+logrecno
+                const geo_record = keyed_lookup[keyed.STUSAB + keyed.LOGRECNO];
+                const record = Object.assign({}, keyed, geo_record);
+
+                // only tracts, bg, county, place, state right now
+                const sumlev = record.SUMLEVEL;
+
+                const component = record.COMPONENT;
+                if (sumlev !== '140' && sumlev !== '150' && sumlev !== '050' && sumlev !== '160' && sumlev !== '040') {
+                    return;
+                }
+                if (component !== '00') {
+                    return;
+                }
+
+                const geoid = record.GEOID;
+                const statecounty = `${record.STATE}${record.COUNTY}`;
+                const state = record.STATE;
+                const sequence = file.slice(0, 1) + file.split('.')[0].slice(-3);
+
+                let aggregator;
+
+                // aggregation level of each geography
+                switch (sumlev) {
+                case '140':
+                case '150':
+                    aggregator = statecounty;
+                    break;
+                case '160':
+                case '050':
+                    aggregator = state;
+                    break;
+                case '040':
+                    aggregator = component;
+                    break;
+                default:
+                    console.log(sumlev);
+                    console.error('unknown summary level');
+                    break;
+                }
+
+                if (!data_cache[sequence]) {
+                    data_cache[sequence] = {};
+                }
+
+                if (!data_cache[sequence][sumlev]) {
+                    data_cache[sequence][sumlev] = {};
+                }
+
+                if (!data_cache[sequence][sumlev][aggregator]) {
+                    data_cache[sequence][sumlev][aggregator] = {};
+                }
+
+                // this is how the data will be modeled in S3
+                data_cache[sequence][sumlev][aggregator][geoid] = record;
+
+            }
+        });
+    });
+
+}
+
+
+function putObject(key, value) {
+    const myBucket = 's3db-acs1115';
+
+    return new Promise((resolve, reject) => {
+        const params = { Bucket: myBucket, Key: key, Body: JSON.stringify(value), ContentType: 'application/json' };
+        s3.putObject(params, function (err, data) {
+            if (err) {
+                console.log(err);
+                return reject(err);
+            }
+            else {
+                console.log(`Successfully uploaded data to ${key}`);
+                console.log(data);
+                return resolve(data);
+            }
+        });
+    });
+
+}
+
+
+function parseGeofile(schemas) {
+
+    const file = `./CensusDL/geofile/acs1115_geofile.csv`;
+    const file_data = fs.readFileSync(file, 'utf8');
+
+    return new Promise((resolve, reject) => {
+        Papa.parse(file_data, {
+            header: false,
+            delimiter: ',',
+            skipEmptyLines: true,
+            complete: function (results, file) {
+                console.log("Parsing complete:", file);
+                const keyed_lookup = convertGeofile(results.data);
+                resolve([schemas, keyed_lookup]);
+            },
+            error: function (error, file) {
+                console.log("error:", error, file);
+                reject('nope');
+            }
+        });
+    });
+
+}
+
+function convertGeofile(data) {
+    // convert geofile to json (with field names).  convert json to key-value
+    // join key is stusab(lowercase) + logrecno
+    const keyed_lookup = {};
+
+    data.forEach(d => {
+        const obj = {};
+        d.forEach((item, index) => {
+            obj[geography_file_headers[index]] = item;
+        });
+        const stusab_lc = obj.STUSAB.toLowerCase();
+        keyed_lookup[stusab_lc + obj.LOGRECNO] = obj;
+    });
+
+    return keyed_lookup;
+}
+
+
+function loadGeoToS3() {
+    return new Promise((resolve, reject) => {
+        const myBucket = 's3db-geofiles';
+        const file = `./CensusDL/geofile/acs1115_geofile.csv`;
+
+        const uploadParams = { Bucket: myBucket, Key: '', Body: '' };
+
+        const fileStream = fs.createReadStream(file);
+        fileStream.on('error', function (err) {
+            console.log('File Error', err);
+            return reject(err);
+        });
+
+        uploadParams.Body = fileStream;
+        uploadParams.Key = path.basename(file);
+
+        s3.upload(uploadParams, function (err, data) {
+            if (err) {
+                console.log("Error", err);
+                return reject(err);
+            }
+            if (data) {
+                console.log("Upload Success", data.Location);
+            }
+            resolve(data);
+        });
+    });
+}
+
+
 function mergeGeoFiles() {
     return new Promise((resolve, reject) => {
-        const command = `awk 'FNR==1 && NR!=1{next;}{print}' ./CensusDL/group1/_unzipped/g20155**.csv > ./CensusDL/geofile/geofile.csv;`;
+        const command = `awk 'FNR==1 && NR!=1{next;}{print}' ./CensusDL/group1/_unzipped/g20155**.csv > ./CensusDL/geofile/acs1115_geofile.csv;`;
         console.log(`running: ${command}`);
         exec(command, function (error, stdout, stderr) {
             if (error) {
@@ -105,11 +348,10 @@ function mergeGeoFiles() {
 
 
 function mergeDataFiles(file_type) {
-    // TODO important: can do standard CONCAT here because no headers
     const typechar = (file_type === 'moe') ? 'm' : 'e';
 
     return new Promise((resolve, reject) => {
-        const command = `for i in $(seq -f "%03g" 1 122); do awk 'FNR==1 && NR!=1{next;}{print}' ./CensusDL/group1/_unzipped/${typechar}20155**0"$i"000.txt ./CensusDL/group2/_unzipped/${typechar}20155**0"$i"000.txt > ./CensusDL/ready/${typechar}seq"$i".csv; done;`;
+        const command = `for i in $(seq -f "%03g" 1 122); do cat ./CensusDL/group1/_unzipped/${typechar}20155**0"$i"000.txt ./CensusDL/group2/_unzipped/${typechar}20155**0"$i"000.txt > ./CensusDL/ready/${typechar}seq"$i".csv; done;`;
         console.log(`running: ${command}`);
         exec(command, function (error, stdout, stderr) {
             if (error) {
@@ -173,8 +415,7 @@ function readyWorkspace() {
 
             // logic to set up directories
             const directories_in_order = ['./CensusDL', './CensusDL/group1',
-            './CensusDL/group2', './CensusDL/group1ready', './CensusDL/group2ready',
-            './CensusDL/ready', './CensusDL/geofile'];
+            './CensusDL/group2', './CensusDL/ready', './CensusDL/geofile'];
 
             directories_in_order.forEach(dir => {
                 if (!fs.existsSync(dir)) {
