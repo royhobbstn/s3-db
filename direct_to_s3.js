@@ -66,10 +66,6 @@ readyWorkspace()
         return loadDataToS3(arr);
     })
     .then(() => {
-        // TODO - not even necessary anymore
-        return loadGeoToS3();
-    })
-    .then(() => {
         console.log('program complete');
     })
     .catch(err => {
@@ -296,36 +292,6 @@ function convertGeofile(data) {
     });
 
     return keyed_lookup;
-}
-
-
-function loadGeoToS3() {
-    return new Promise((resolve, reject) => {
-        const myBucket = 's3db-geofiles';
-        const file = `./CensusDL/geofile/acs1115_geofile.csv`;
-
-        const uploadParams = { Bucket: myBucket, Key: '', Body: '' };
-
-        const fileStream = fs.createReadStream(file);
-        fileStream.on('error', function (err) {
-            console.log('File Error', err);
-            return reject(err);
-        });
-
-        uploadParams.Body = fileStream;
-        uploadParams.Key = path.basename(file);
-
-        s3.upload(uploadParams, function (err, data) {
-            if (err) {
-                console.log("Error", err);
-                return reject(err);
-            }
-            if (data) {
-                console.log("Upload Success", data.Location);
-            }
-            resolve(data);
-        });
-    });
 }
 
 
