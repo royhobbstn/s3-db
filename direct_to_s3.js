@@ -161,6 +161,7 @@ function parseFile(file_data, file, schemas, keyed_lookup) {
                     process.exit();
                 }
 
+
                 const seq_string = file.split('.')[0].slice(-3);
                 const seq_fields = schemas[seq_string];
 
@@ -170,7 +171,8 @@ function parseFile(file_data, file, schemas, keyed_lookup) {
                 });
 
                 // combine with geo on stustab+logrecno
-                const geo_record = keyed_lookup[keyed.STUSAB + keyed.LOGRECNO];
+                const unique_key = keyed.STUSAB + keyed.LOGRECNO;
+                const geo_record = keyed_lookup[unique_key];
                 const record = Object.assign({}, keyed, geo_record);
 
                 // only tracts, bg, county, place, state right now
@@ -183,6 +185,8 @@ function parseFile(file_data, file, schemas, keyed_lookup) {
                 if (component !== '00') {
                     return;
                 }
+
+                // TODO states not joining
 
                 const geoid = record.GEOID;
                 const statecounty = `${record.STATE}${record.COUNTY}`;
@@ -297,7 +301,7 @@ function convertGeofile(data) {
 
 function mergeGeoFiles() {
     return new Promise((resolve, reject) => {
-        const command = `awk 'FNR==1 && NR!=1{next;}{print}' ./CensusDL/group1/_unzipped/g20155**.csv > ./CensusDL/geofile/acs1115_geofile.csv;`;
+        const command = `cat ./CensusDL/group1/_unzipped/g20155**.csv > ./CensusDL/geofile/acs1115_geofile.csv;`;
         console.log(`running: ${command}`);
         exec(command, function (error, stdout, stderr) {
             if (error) {

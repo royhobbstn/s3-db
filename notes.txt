@@ -51,6 +51,9 @@ How does multicounty compare to loading all BGs in the State in One State File?
 
     ------------------------
 
+
+s3 bucket state level data doesnt include all states
+
 To Build
 
 - have data co and wy
