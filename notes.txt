@@ -52,19 +52,18 @@ How does multicounty compare to loading all BGs in the State in One State File?
     ------------------------
 
 
-s3 bucket state level data doesnt include all states
 
 To Build
 
-- have data co and wy
+    
 
-Deploy functions to Lambda (us west oregon)
+separate into different lambda repos
 
-Complex test queries & moe queries
+configure default iam for each lambda in serverless.yml
+
+
+The Map -> Complex test queries & moe queries
 
 Load all data. (from an ec2 in us west oregon)
 
-    
-The Map
-    
 Cloudfront in front of S3.
