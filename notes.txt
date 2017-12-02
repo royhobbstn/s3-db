@@ -55,10 +55,6 @@ How does multicounty compare to loading all BGs in the State in One State File?
 
 To Build
 
-    
-
-separate into different lambda repos
-
 configure default iam for each lambda in serverless.yml
 
 
