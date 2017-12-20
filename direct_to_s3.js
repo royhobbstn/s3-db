@@ -3,7 +3,7 @@
 const argv = require('yargs').argv;
 const states = require('./modules/states');
 const Promise = require('bluebird');
-const request = require('request');
+const request = require('requestretry');
 const fs = require('fs');
 const unzip = require('unzip');
 const csv = require('csvtojson');
@@ -15,12 +15,32 @@ const path = require('path');
 const Papa = require('papaparse');
 
 
+const dataset = {
+    year: 2014,
+    text: 'acs1014',
+    seq_files: '121'
+};
+
+// const dataset = {
+//     year: 2015,
+//     text: 'acs1115',
+//     seq_files: '122'
+// };
+
+// const dataset = {
+//     year: 2016,
+//     text: 'acs1216',
+//     seq_files: '122'
+// };
+
+
 const geography_file_headers = ["FILEID", "STUSAB", "SUMLEVEL", "COMPONENT", "LOGRECNO", "US",
-                "REGION", "DIVISION", "STATECE", "STATE", "COUNTY", "COUSUB", "PLACE", "TRACT", "BLKGRP", "CONCIT",
-                "AIANHH", "AIANHHFP", "AIHHTLI", "AITSCE", "AITS", "ANRC", "CBSA", "CSA", "METDIV", "MACC", "MEMI",
-                "NECTA", "CNECTA", "NECTADIV", "UA", "BLANK1", "CDCURR", "SLDU", "SLDL", "BLANK2", "BLANK3",
-                "ZCTA5", "SUBMCD", "SDELM", "SDSEC", "SDUNI", "UR", "PCI", "BLANK4", "BLANK5", "PUMA5", "BLANK6",
-                "GEOID", "NAME", "BTTR", "BTBG", "BLANK7"];
+    "REGION", "DIVISION", "STATECE", "STATE", "COUNTY", "COUSUB", "PLACE", "TRACT", "BLKGRP", "CONCIT",
+    "AIANHH", "AIANHHFP", "AIHHTLI", "AITSCE", "AITS", "ANRC", "CBSA", "CSA", "METDIV", "MACC", "MEMI",
+    "NECTA", "CNECTA", "NECTADIV", "UA", "BLANK1", "CDCURR", "SLDU", "SLDL", "BLANK2", "BLANK3",
+    "ZCTA5", "SUBMCD", "SDELM", "SDSEC", "SDUNI", "UR", "PCI", "BLANK4", "BLANK5", "PUMA5", "BLANK6",
+    "GEOID", "NAME", "BTTR", "BTBG", "BLANK7"
+];
 
 // if no states entered as parameters, use all states
 const loop_states = argv._.length ? argv._ : Object.keys(states);
@@ -125,7 +145,7 @@ function parseFile(file_data, file, schemas, keyed_lookup) {
         Papa.parse(file_data, {
             header: false,
             skipEmptyLines: true,
-            complete: function () {
+            complete: function() {
 
                 let put_object_array = [];
 
@@ -141,7 +161,7 @@ function parseFile(file_data, file, schemas, keyed_lookup) {
                 });
 
                 // run up to 5 AWS PutObject calls concurrently
-                Promise.map(put_object_array, function (obj) {
+                Promise.map(put_object_array, function(obj) {
                     return putObject(obj.filename, obj.data);
                 }, { concurrency: 5 }).then(d => {
                     console.log(`inserted: ${d.length} objects into S3`);
@@ -152,7 +172,7 @@ function parseFile(file_data, file, schemas, keyed_lookup) {
                 });
 
             },
-            step: function (results) {
+            step: function(results) {
 
                 if (results.errors.length) {
                     console.log(results);
@@ -197,21 +217,21 @@ function parseFile(file_data, file, schemas, keyed_lookup) {
 
                 // aggregation level of each geography
                 switch (sumlev) {
-                case '140':
-                case '150':
-                    aggregator = statecounty;
-                    break;
-                case '160':
-                case '050':
-                    aggregator = state;
-                    break;
-                case '040':
-                    aggregator = component;
-                    break;
-                default:
-                    console.log(sumlev);
-                    console.error('unknown summary level');
-                    break;
+                    case '140':
+                    case '150':
+                        aggregator = statecounty;
+                        break;
+                    case '160':
+                    case '050':
+                        aggregator = state;
+                        break;
+                    case '040':
+                        aggregator = component;
+                        break;
+                    default:
+                        console.log(sumlev);
+                        console.error('unknown summary level');
+                        break;
                 }
 
                 if (!data_cache[sequence]) {
@@ -237,18 +257,18 @@ function parseFile(file_data, file, schemas, keyed_lookup) {
 
 
 function putObject(key, value) {
-    const myBucket = 's3db-acs1115';
+    const myBucket = `s3db-${dataset.text}`;
 
     return new Promise((resolve, reject) => {
         const params = { Bucket: myBucket, Key: key, Body: JSON.stringify(value), ContentType: 'application/json' };
-        s3.putObject(params, function (err, data) {
+        s3.putObject(params, function(err, data) {
             if (err) {
                 console.log(err);
                 return reject(err);
             }
             else {
-                console.log(`Successfully uploaded data to ${key}`);
-                console.log(data);
+                // console.log(`Successfully uploaded data to ${key}`);
+                // console.log(data);
                 return resolve(data);
             }
         });
@@ -259,7 +279,7 @@ function putObject(key, value) {
 
 function parseGeofile(schemas) {
 
-    const file = `./CensusDL/geofile/acs1115_geofile.csv`;
+    const file = `./CensusDL/geofile/${dataset.text}_geofile.csv`;
     const file_data = fs.readFileSync(file, 'utf8');
 
     return new Promise((resolve, reject) => {
@@ -267,12 +287,12 @@ function parseGeofile(schemas) {
             header: false,
             delimiter: ',',
             skipEmptyLines: true,
-            complete: function (results, file) {
+            complete: function(results, file) {
                 console.log("Parsing complete:", file);
                 const keyed_lookup = convertGeofile(results.data);
                 resolve([schemas, keyed_lookup]);
             },
-            error: function (error, file) {
+            error: function(error, file) {
                 console.log("error:", error, file);
                 reject('nope');
             }
@@ -301,9 +321,9 @@ function convertGeofile(data) {
 
 function mergeGeoFiles() {
     return new Promise((resolve, reject) => {
-        const command = `cat ./CensusDL/group1/_unzipped/g20155**.csv > ./CensusDL/geofile/acs1115_geofile.csv;`;
+        const command = `cat ./CensusDL/group1/_unzipped/g${dataset.year}5**.csv > ./CensusDL/geofile/${dataset.text}_geofile.csv;`;
         console.log(`running: ${command}`);
-        exec(command, function (error, stdout, stderr) {
+        exec(command, function(error, stdout, stderr) {
             if (error) {
                 console.log(`error code: ${error.code}`);
                 console.log(`stderr: ${stderr}`);
@@ -321,9 +341,9 @@ function mergeDataFiles(file_type) {
     const typechar = (file_type === 'moe') ? 'm' : 'e';
 
     return new Promise((resolve, reject) => {
-        const command = `for i in $(seq -f "%03g" 1 122); do cat ./CensusDL/group1/_unzipped/${typechar}20155**0"$i"000.txt ./CensusDL/group2/_unzipped/${typechar}20155**0"$i"000.txt > ./CensusDL/ready/${typechar}seq"$i".csv; done;`;
+        const command = `for i in $(seq -f "%03g" 1 ${dataset.seq_files}); do cat ./CensusDL/group1/_unzipped/${typechar}${dataset.year}5**0"$i"000.txt ./CensusDL/group2/_unzipped/${typechar}${dataset.year}5**0"$i"000.txt > ./CensusDL/ready/${typechar}seq"$i".csv; done;`;
         console.log(`running: ${command}`);
-        exec(command, function (error, stdout, stderr) {
+        exec(command, function(error, stdout, stderr) {
             if (error) {
                 console.log(`error code: ${error.code}`);
                 console.log(`stderr: ${stderr}`);
@@ -340,8 +360,8 @@ function mergeDataFiles(file_type) {
 function createSchemaFiles() {
     return new Promise((resolve, reject) => {
 
-        const url = 'https://www2.census.gov/programs-surveys/acs/summary_file/2015/documentation/user_tools/ACS_5yr_Seq_Table_Number_Lookup.txt';
-        request(url, function (err, resp, body) {
+        const url = `https://www2.census.gov/programs-surveys/acs/summary_file/${dataset.year}/documentation/user_tools/ACS_5yr_Seq_Table_Number_Lookup.txt`;
+        request(url, function(err, resp, body) {
             if (err) { return reject(err); }
 
             csv({ noheader: false })
@@ -378,14 +398,15 @@ function createSchemaFiles() {
 function readyWorkspace() {
     return new Promise((resolve, reject) => {
         // delete ./CensusDL if exists
-        rimraf('./CensusDL', function (err) {
+        rimraf('./CensusDL', function(err) {
             if (err) {
                 return reject(err);
             }
 
             // logic to set up directories
             const directories_in_order = ['./CensusDL', './CensusDL/group1',
-            './CensusDL/group2', './CensusDL/ready', './CensusDL/geofile'];
+                './CensusDL/group2', './CensusDL/ready', './CensusDL/geofile'
+            ];
 
             directories_in_order.forEach(dir => {
                 if (!fs.existsSync(dir)) {
@@ -404,24 +425,24 @@ function requestAndSaveStateFileFromACS(abbr, isTractBGFile) {
         const fileName = states[abbr];
         const fileType = isTractBGFile ? '_Tracts_Block_Groups_Only' : '_All_Geographies_Not_Tracts_Block_Groups';
         const outputDir = isTractBGFile ? 'CensusDL/group1/' : 'CensusDL/group2/';
-        const fileUrl = `https://www2.census.gov/programs-surveys/acs/summary_file/2015/data/5_year_by_state/${fileName}${fileType}.zip`;
+        const fileUrl = `https://www2.census.gov/programs-surveys/acs/summary_file/${dataset.year}/data/5_year_by_state/${fileName}${fileType}.zip`;
         const outputFile = `${states[abbr]}${fileType}.zip`;
 
         console.log(`downloading ${fileName}${fileType}.zip`);
-        request({ url: fileUrl, encoding: null }, function (err, resp, body) {
+        request({ url: fileUrl, encoding: null }, function(err, resp, body) {
             if (err) { return reject(err); }
-            fs.writeFile(`${outputDir}${outputFile}`, body, function (err) {
+            fs.writeFile(`${outputDir}${outputFile}`, body, function(err) {
                 if (err) { return reject(err); }
                 console.log(`${outputFile} written!`);
 
                 // unzip
                 const stream = fs.createReadStream(`${outputDir}${outputFile}`);
                 stream.pipe(unzip.Extract({ path: `${outputDir}_unzipped` })
-                    .on('close', function () {
+                    .on('close', function() {
                         console.log(`${outputFile} unzipped!`);
                         resolve('done unzip');
                     })
-                    .on('error', function (err) {
+                    .on('error', function(err) {
                         reject(err);
                     })
                 );

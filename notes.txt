@@ -55,11 +55,13 @@ How does multicounty compare to loading all BGs in the State in One State File?
 
 To Build
 
-configure default iam for each lambda in serverless.yml
-
 
 The Map -> Complex test queries & moe queries
 
 Load all data. (from an ec2 in us west oregon)
 
 Cloudfront in front of S3.
+
+spawn processes instead
+
+whats the size of census 2010 raw files compared to acs?
