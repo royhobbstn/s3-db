@@ -3,8 +3,8 @@ Testing S3 as a read-only database with potentially thousands of simultaneous qu
 
 Requires Node 8 or higher (async await)
 
-Use a big machine!  (tested on r4.xlarge - failed at seq-m35.  Try larger instance.)
+Use a big machine!  (try r4.2xlarge)
 
 ```
-node --max-old-space-size=8192 direct_to_s3.js
+node --max-old-space-size=16384 direct_to_s3.js
 ```

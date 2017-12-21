@@ -15,17 +15,17 @@ const path = require('path');
 const Papa = require('papaparse');
 
 
-const dataset = {
-    year: 2014,
-    text: 'acs1014',
-    seq_files: '121'
-};
-
 // const dataset = {
-//     year: 2015,
-//     text: 'acs1115',
-//     seq_files: '122'
+//     year: 2014,
+//     text: 'acs1014',
+//     seq_files: '121'
 // };
+
+const dataset = {
+    year: 2015,
+    text: 'acs1115',
+    seq_files: '122'
+};
 
 // const dataset = {
 //     year: 2016,
@@ -64,26 +64,18 @@ readyWorkspace()
         }, { concurrency: 5 });
     })
     .then(() => {
-        console.log('merging estimate files');
-        return mergeDataFiles('estimate');
+        console.log('renaming and moving files');
+        return renameAndMoveFiles();
     })
     .then(() => {
-        console.log('merging moe files');
-        return mergeDataFiles('moe');
-    })
-    .then(() => {
-        console.log('merging geo files');
-        return mergeGeoFiles();
-    })
-    .then(() => {
-        console.log('all file merging completed');
+        console.log('creating schema files');
         return createSchemaFiles();
     })
-    .then(schemas => {
-        return parseGeofile(schemas);
+    .then(() => {
+        return parseGeofiles();
     })
-    .then(arr => {
-        return loadDataToS3(arr);
+    .then(() => {
+        return loadDataToS3();
     })
     .then(() => {
         console.log('program complete');
@@ -96,11 +88,49 @@ readyWorkspace()
 
 /**************************/
 
+function renameAndMoveFiles() {
+    return new Promise((resolve, reject) => {
+
+        // rename and move files in each group 1 and group 2
+        const input_folder_1 = path.join(__dirname, './CensusDL/stage1/');
+        const input_folder_2 = path.join(__dirname, './CensusDL/stage2/');
+
+        const output_path = path.join(__dirname, './CensusDL/ready/');
+
+        const files1 = fs.readdirSync(input_folder_1);
+        files1
+            .filter(file => {
+                // exclude geo files
+                return file.slice(0, 1) !== 'g';
+            })
+            .forEach(function(file) {
+                const old_path = path.join(input_folder_1, file);
+                const new_path = path.join(output_path, `1_${file}`);
+                fs.renameSync(old_path, new_path);
+            });
+
+        const files2 = fs.readdirSync(input_folder_2);
+        files2
+            .filter(file => {
+                // exclude geo files
+                return file.slice(0, 1) !== 'g';
+            })
+            .forEach(function(file) {
+                const old_path = path.join(input_folder_2, file);
+                const new_path = path.join(output_path, `2_${file}`);
+                fs.renameSync(old_path, new_path);
+            });
+
+        resolve(true);
+
+    });
+}
 
 
-function loadDataToS3(arr) {
-    const schemas = arr[0];
-    const keyed_lookup = arr[1];
+function loadDataToS3() {
+
+    // load schemas file into memory
+    const schemas = JSON.parse(fs.readFileSync('./CensusDL/geofile/schemas.json'));
 
     const folder = path.join(__dirname, './CensusDL/ready/');
 
@@ -124,6 +154,13 @@ function loadDataToS3(arr) {
                 console.log(`reading: ${file}`);
                 const file_data = fs.readFileSync(path.join(__dirname, `./CensusDL/ready/${file}`), { encoding: 'binary' });
                 console.log(`parsing: ${file}`);
+
+                // get file name and load the appropriate geofile to go with it
+                // TODO set the geofile contents to keyed_lookup
+                const state = file.slice(8, 10);
+                console.log(state);
+                const keyed_lookup = JSON.parse(fs.readFileSync(`./CensusDL/geofile/g${dataset.year}5${state}.json`, 'utf8'));
+
                 await parseFile(file_data, file, schemas, keyed_lookup);
                 console.log(`done with: ${file}`);
             });
@@ -186,6 +223,9 @@ function parseFile(file_data, file, schemas, keyed_lookup) {
                 const seq_fields = schemas[seq_string];
 
                 const keyed = {};
+                console.log(results.data);
+                console.log(results.data[0]);
+                console.log(typeof results.data[0]);
                 results.data[0].forEach((d, i) => {
                     keyed[seq_fields[i]] = d;
                 });
@@ -221,10 +261,8 @@ function parseFile(file_data, file, schemas, keyed_lookup) {
                         break;
                     case '160':
                     case '050':
-                        aggregator = state;
-                        break;
                     case '040':
-                        aggregator = component;
+                        aggregator = state;
                         break;
                     default:
                         console.log(sumlev);
@@ -275,27 +313,34 @@ function putObject(key, value) {
 }
 
 
-function parseGeofile(schemas) {
+function parseGeofiles() {
 
-    const file = `./CensusDL/geofile/${dataset.text}_geofile.csv`;
-    const file_data = fs.readFileSync(file, 'utf8');
+    // in sequence read all geofiles and write a geojson file to /geofile
 
-    return new Promise((resolve, reject) => {
-        Papa.parse(file_data, {
-            header: false,
-            delimiter: ',',
-            skipEmptyLines: true,
-            complete: function(results, file) {
-                console.log("Parsing complete:", file);
-                const keyed_lookup = convertGeofile(results.data);
-                resolve([schemas, keyed_lookup]);
-            },
-            error: function(error, file) {
-                console.log("error:", error, file);
-                reject('nope');
-            }
+    return Promise.map(loop_states, state => {
+        const file = `./CensusDL/stage1/g${dataset.year}5${state}.csv`;
+        const file_data = fs.readFileSync(file, 'utf8');
+
+        return new Promise((resolve, reject) => {
+            Papa.parse(file_data, {
+                header: false,
+                delimiter: ',',
+                skipEmptyLines: true,
+                complete: function(results, file) {
+                    const keyed_lookup = convertGeofile(results.data);
+                    // save keyed_lookup
+                    fs.writeFileSync(`./CensusDL/geofile/g${dataset.year}5${state}.json`, JSON.stringify(keyed_lookup), 'utf8');
+                    resolve(true);
+                },
+                error: function(error, file) {
+                    console.log("error:", error, file);
+                    reject('nope');
+                }
+            });
         });
-    });
+
+
+    }, { concurrency: 1 });
 
 }
 
@@ -317,43 +362,6 @@ function convertGeofile(data) {
 }
 
 
-function mergeGeoFiles() {
-    return new Promise((resolve, reject) => {
-        const command = `cat ./CensusDL/group1/_unzipped/g${dataset.year}5**.csv > ./CensusDL/geofile/${dataset.text}_geofile.csv;`;
-        console.log(`running: ${command}`);
-        exec(command, function(error, stdout, stderr) {
-            if (error) {
-                console.log(`error code: ${error.code}`);
-                console.log(`stderr: ${stderr}`);
-                reject(`error: ${error.code} ${stderr}`);
-            }
-            console.log('completed merging geofile.');
-            resolve('completed merging geofile.');
-        });
-    });
-
-}
-
-
-function mergeDataFiles(file_type) {
-    const typechar = (file_type === 'moe') ? 'm' : 'e';
-
-    return new Promise((resolve, reject) => {
-        const command = `for i in $(seq -f "%03g" 1 ${dataset.seq_files}); do cat ./CensusDL/group1/_unzipped/${typechar}${dataset.year}5**0"$i"000.txt ./CensusDL/group2/_unzipped/${typechar}${dataset.year}5**0"$i"000.txt > ./CensusDL/ready/${typechar}seq"$i".csv; done;`;
-        console.log(`running: ${command}`);
-        exec(command, function(error, stdout, stderr) {
-            if (error) {
-                console.log(`error code: ${error.code}`);
-                console.log(`stderr: ${stderr}`);
-                reject(`error: ${error.code} ${stderr}`);
-            }
-            console.log('completed merging files.');
-            resolve('completed merging');
-        });
-    });
-}
-
-
 
 function createSchemaFiles() {
     return new Promise((resolve, reject) => {
@@ -371,7 +379,7 @@ function createSchemaFiles() {
                     data.forEach(d => {
                         const line_number = Number(d['Line Number']);
                         if (Number.isInteger(line_number) && line_number > 0) {
-                            const field_name = d['Table ID'] + String(d['Line Number']).padStart(3, "0");;
+                            const field_name = d['Table ID'] + String(d['Line Number']).padStart(3, "0");
                             const seq_num = d['Sequence Number'].slice(1);
                             if (fields[seq_num]) {
                                 fields[seq_num].push(field_name);
@@ -382,7 +390,8 @@ function createSchemaFiles() {
                         }
                     });
 
-                    resolve(fields);
+                    fs.writeFileSync('./CensusDL/geofile/schemas.json', JSON.stringify(fields), 'utf8');
+                    resolve(true);
                 })
                 .on('done', () => {
                     //parsing finished
@@ -403,7 +412,8 @@ function readyWorkspace() {
 
             // logic to set up directories
             const directories_in_order = ['./CensusDL', './CensusDL/group1',
-                './CensusDL/group2', './CensusDL/ready', './CensusDL/geofile'
+                './CensusDL/group2', './CensusDL/stage1', './CensusDL/stage2',
+                './CensusDL/ready', './CensusDL/geofile'
             ];
 
             directories_in_order.forEach(dir => {
@@ -423,6 +433,7 @@ function requestAndSaveStateFileFromACS(abbr, isTractBGFile) {
         const fileName = states[abbr];
         const fileType = isTractBGFile ? '_Tracts_Block_Groups_Only' : '_All_Geographies_Not_Tracts_Block_Groups';
         const outputDir = isTractBGFile ? 'CensusDL/group1/' : 'CensusDL/group2/';
+        const stageDir = isTractBGFile ? 'stage1' : 'stage2';
         const fileUrl = `https://www2.census.gov/programs-surveys/acs/summary_file/${dataset.year}/data/5_year_by_state/${fileName}${fileType}.zip`;
         const outputFile = `${states[abbr]}${fileType}.zip`;
 
@@ -435,7 +446,7 @@ function requestAndSaveStateFileFromACS(abbr, isTractBGFile) {
 
                 // unzip
                 const stream = fs.createReadStream(`${outputDir}${outputFile}`);
-                stream.pipe(unzip.Extract({ path: `${outputDir}_unzipped` })
+                stream.pipe(unzip.Extract({ path: `CensusDL/${stageDir}` })
                     .on('close', function() {
                         console.log(`${outputFile} unzipped!`);
                         resolve('done unzip');
