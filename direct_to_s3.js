@@ -155,12 +155,12 @@ function loadDataToS3() {
                 const file_data = fs.readFileSync(path.join(__dirname, `./CensusDL/ready/${file}`), { encoding: 'binary' });
                 console.log(`parsing: ${file}`);
 
-                // get file name and load the appropriate geofile to go with it
-                // TODO set the geofile contents to keyed_lookup
                 const state = file.slice(8, 10);
+                const e_or_m = file.slice(2, 3);
+
                 const keyed_lookup = JSON.parse(fs.readFileSync(`./CensusDL/geofile/g${dataset.year}5${state}.json`, 'utf8'));
 
-                await parseFile(file_data, file, schemas, keyed_lookup);
+                await parseFile(file_data, file, schemas, keyed_lookup, e_or_m);
                 console.log(`done with: ${file}`);
             });
             console.log('Done');
@@ -174,7 +174,7 @@ function loadDataToS3() {
 
 
 
-function parseFile(file_data, file, schemas, keyed_lookup) {
+function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
     return new Promise((resolve, reject) => {
         const data_cache = {};
 
@@ -221,7 +221,12 @@ function parseFile(file_data, file, schemas, keyed_lookup) {
                 const keyed = {};
 
                 results.data[0].forEach((d, i) => {
-                    keyed[seq_fields[i]] = d;
+                    if (i > 5 && e_or_m === 'm') {
+                        keyed[seq_fields[i] + '_moe'] = d;
+                    }
+                    else {
+                        keyed[seq_fields[i]] = d;
+                    }
                 });
 
                 // combine with geo on stustab+logrecno
