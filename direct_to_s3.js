@@ -14,17 +14,17 @@ const path = require('path');
 const Papa = require('papaparse');
 
 
-// const dataset = {
-//     year: 2014,
-//     text: 'acs1014',
-//     seq_files: '121'
-// };
-
 const dataset = {
-    year: 2015,
-    text: 'acs1115',
-    seq_files: '122'
+    year: 2014,
+    text: 'acs1014',
+    seq_files: '121'
 };
+
+// const dataset = {
+//     year: 2015,
+//     text: 'acs1115',
+//     seq_files: '122'
+// };
 
 // const dataset = {
 //     year: 2016,

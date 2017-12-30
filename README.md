@@ -11,8 +11,8 @@ Use a big machine!  (try c5.2xlarge)
 sudo yum install -y git
 wget -qO- https://raw.githubusercontent.com/creationix/nvm/v0.33.2/install.sh | bash
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 nvm install node
 ```
 
@@ -22,7 +22,7 @@ nvm install node
 mkdir 1 2 3 4 5 6 7 8
 
 cd 1
-git pull https://github.com/royhobbstn/s3-db.git
+git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
 npm install
 screen
@@ -40,6 +40,6 @@ node direct_to_s3.js in ia ks ky la me md
 node direct_to_s3.js ma mi mn ms mo mt ne
 node direct_to_s3.js nv nh nj nm ny nc nd
 node direct_to_s3.js oh ok or pa pr ri sc
-node direct_to_s3.js sd tn tx us ut vt va
-node direct_to_s3.js wa wv wi wy
+node direct_to_s3.js sd tn tx ut vt va wa
+node direct_to_s3.js wv wi wy us
 ```
