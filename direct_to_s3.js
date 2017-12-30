@@ -8,7 +8,6 @@ const fs = require('fs');
 const unzip = require('unzip');
 const csv = require('csvtojson');
 const rimraf = require('rimraf');
-const exec = require('child_process').exec;
 const AWS = require('aws-sdk');
 const s3 = new AWS.S3();
 const path = require('path');
