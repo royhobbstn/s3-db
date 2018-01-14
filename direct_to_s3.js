@@ -175,30 +175,17 @@ function loadDataToS3() {
 
 function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
     return new Promise((resolve, reject) => {
-        const data_cache = {};
+        const data_cache = [];
 
         Papa.parse(file_data, {
             header: false,
             skipEmptyLines: true,
             complete: function() {
 
-                let put_object_array = [];
-
-                Object.keys(data_cache).forEach(sequence => {
-                    Object.keys(data_cache[sequence]).forEach(sumlev => {
-                        Object.keys(data_cache[sequence][sumlev]).forEach(aggregator => {
-                            const filename = `${sequence}/${sumlev}/${aggregator}.json`;
-                            const data = data_cache[sequence][sumlev][aggregator];
-                            put_object_array.push({ filename, data });
-                        });
-                    });
-                });
-
                 // run up to 5 AWS PutObject calls concurrently
-                Promise.map(put_object_array, function(obj) {
-                    return putObject(obj.filename, obj.data);
-                }, { concurrency: 5 }).then(d => {
-                    console.log(`inserted: ${d.length} objects into S3`);
+                putObject(file, data_cache)
+                    .then(d => {
+                    console.log(`loaded modified ${file} into S3`);
                     console.log("Finished");
                     resolve(`finished: ${file}`);
                 }).catch(err => {
@@ -243,46 +230,9 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
                 if (component !== '00') {
                     return;
                 }
-
-                const geoid = record.GEOID;
-                const statecounty = `${record.STATE}${record.COUNTY}`;
-                const state = record.STATE;
-                const sequence = file.slice(2, 3) + file.split('.')[0].slice(-6, -3);
-
-                let aggregator;
-
-                // aggregation level of each geography
-                switch (sumlev) {
-                    case '140':
-                    case '150':
-                        aggregator = statecounty;
-                        break;
-                    case '160':
-                    case '050':
-                    case '040':
-                        aggregator = state;
-                        break;
-                    default:
-                        console.log(sumlev);
-                        console.error('unknown summary level');
-                        break;
-                }
-
-                if (!data_cache[sequence]) {
-                    data_cache[sequence] = {};
-                }
-
-                if (!data_cache[sequence][sumlev]) {
-                    data_cache[sequence][sumlev] = {};
-                }
-
-                if (!data_cache[sequence][sumlev][aggregator]) {
-                    data_cache[sequence][sumlev][aggregator] = {};
-                }
-
-                // this is how the data will be modeled in S3
-                data_cache[sequence][sumlev][aggregator][geoid] = record;
-
+                
+                data_cache.push(record);
+                
             }
         });
     });
@@ -294,7 +244,7 @@ function putObject(key, value) {
     const myBucket = `s3db-${dataset.text}`;
 
     return new Promise((resolve, reject) => {
-        const params = { Bucket: myBucket, Key: key, Body: JSON.stringify(value), ContentType: 'application/json' };
+        const params = { Bucket: myBucket, Key: key, Body: Papa.unparse(value, {header: false}), ContentType: 'text/csv' };
         s3.putObject(params, function(err, data) {
             if (err) {
                 console.log(err);
