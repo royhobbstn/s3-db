@@ -175,17 +175,30 @@ function loadDataToS3() {
 
 function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
     return new Promise((resolve, reject) => {
-        const data_cache = [];
+        const data_cache = {};
 
         Papa.parse(file_data, {
             header: false,
             skipEmptyLines: true,
             complete: function() {
 
+                let put_object_array = [];
+
+                Object.keys(data_cache).forEach(sequence => {
+                    Object.keys(data_cache[sequence]).forEach(sumlev => {
+                        Object.keys(data_cache[sequence][sumlev]).forEach(state => {
+                            const filename = `${sequence}/${sumlev}/${state}.csv`;
+                            const data = data_cache[sequence][sumlev][state];
+                            put_object_array.push({ filename, data });
+                        });
+                    });
+                });
+
                 // run up to 5 AWS PutObject calls concurrently
-                putObject(file, data_cache)
-                    .then(d => {
-                    console.log(`loaded modified ${file} into S3`);
+                Promise.map(put_object_array, function(obj) {
+                    return putObject(obj.filename, obj.data);
+                }, { concurrency: 5 }).then(d => {
+                    console.log(`inserted: ${d.length} objects into S3`);
                     console.log("Finished");
                     resolve(`finished: ${file}`);
                 }).catch(err => {
@@ -218,21 +231,43 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
                 // combine with geo on stustab+logrecno
                 const unique_key = keyed.STUSAB + keyed.LOGRECNO;
                 const geo_record = keyed_lookup[unique_key];
-                const record = Object.assign({}, keyed, geo_record);
+
+                // pick only GEOID and NAME (for now, TODO )from geography file
+                const picked = (({ GEOID, NAME }) => ({ GEOID, NAME }))(geo_record);
+
+                // combine geography with data
+                const record = Object.assign({}, keyed, picked);
 
                 // only tracts, bg, county, place, state right now
-                const sumlev = record.SUMLEVEL;
+                const sumlev = geo_record.SUMLEVEL;
 
-                const component = record.COMPONENT;
+                const component = geo_record.COMPONENT;
                 if (sumlev !== '140' && sumlev !== '150' && sumlev !== '050' && sumlev !== '160' && sumlev !== '040') {
                     return;
                 }
                 if (component !== '00') {
                     return;
                 }
-                
-                data_cache.push(record);
-                
+
+                const state = geo_record.STATE;
+                const sequence = file.slice(2, 3) + file.split('.')[0].slice(-6, -3);
+
+
+                if (!data_cache[sequence]) {
+                    data_cache[sequence] = {};
+                }
+
+                if (!data_cache[sequence][sumlev]) {
+                    data_cache[sequence][sumlev] = {};
+                }
+
+                if (!data_cache[sequence][sumlev][state]) {
+                    data_cache[sequence][sumlev][state] = [];
+                }
+
+                // this is how the data will be modeled in S3		
+                data_cache[sequence][sumlev][state].push(record);
+
             }
         });
     });
@@ -241,10 +276,10 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
 
 
 function putObject(key, value) {
-    const myBucket = `s3db-${dataset.text}`;
+    const myBucket = `s3db-v2-${dataset.text}`;
 
     return new Promise((resolve, reject) => {
-        const params = { Bucket: myBucket, Key: key, Body: Papa.unparse(value, {header: false}), ContentType: 'text/csv' };
+        const params = { Bucket: myBucket, Key: key, Body: Papa.unparse(value, { header: false }), ContentType: 'text/csv' };
         s3.putObject(params, function(err, data) {
             if (err) {
                 console.log(err);
