@@ -279,7 +279,7 @@ function putObject(key, value) {
     const myBucket = `s3db-v2-${dataset.text}`;
 
     return new Promise((resolve, reject) => {
-        const params = { Bucket: myBucket, Key: key, Body: Papa.unparse(value, { header: false }), ContentType: 'text/csv' };
+        const params = { Bucket: myBucket, Key: key, Body: Papa.unparse(value, { header: true }), ContentType: 'text/csv' };
         s3.putObject(params, function(err, data) {
             if (err) {
                 console.log(err);
