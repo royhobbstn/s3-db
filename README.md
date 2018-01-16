@@ -26,7 +26,7 @@ git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
 npm install
 screen
-node direct_to_s3.js al ak az ar ca co ct
+node --max_old_space_size=4096 direct_to_s3.js al ak az ar ca co ct
 ```
 
 etc...
@@ -34,12 +34,12 @@ etc...
 *For each folder / screen session, use one of:*
 
 ```
-node direct_to_s3.js al ak az ar ca co ct
-node direct_to_s3.js de dc fl ga hi id il
-node direct_to_s3.js in ia ks ky la me md
-node direct_to_s3.js ma mi mn ms mo mt ne
-node direct_to_s3.js nv nh nj nm ny nc nd
-node direct_to_s3.js oh ok or pa pr ri sc
-node direct_to_s3.js sd tn tx ut vt va wa
-node direct_to_s3.js wv wi wy us
+node --max_old_space_size=4096 direct_to_s3.js al ak az ar ca co ct
+node --max_old_space_size=4096 direct_to_s3.js de dc fl ga hi id il
+node --max_old_space_size=4096 direct_to_s3.js in ia ks ky la me md
+node --max_old_space_size=4096 direct_to_s3.js ma mi mn ms mo mt ne
+node --max_old_space_size=4096 direct_to_s3.js nv nh nj nm ny nc nd
+node --max_old_space_size=4096 direct_to_s3.js oh ok or pa pr ri sc
+node --max_old_space_size=4096 direct_to_s3.js sd tn tx ut vt va wa
+node --max_old_space_size=4096 direct_to_s3.js wv wi wy us
 ```
