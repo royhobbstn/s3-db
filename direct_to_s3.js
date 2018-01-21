@@ -12,7 +12,7 @@ const AWS = require('aws-sdk');
 const s3 = new AWS.S3();
 const path = require('path');
 const Papa = require('papaparse');
-
+const zlib = require('zlib');
 
 // const dataset = {
 //     year: 2014,
@@ -20,17 +20,17 @@ const Papa = require('papaparse');
 //     seq_files: '121'
 // };
 
-// const dataset = {
-//     year: 2015,
-//     text: 'acs1115',
-//     seq_files: '122'
-// };
-
 const dataset = {
-    year: 2016,
-    text: 'acs1216',
+    year: 2015,
+    text: 'acs1115',
     seq_files: '122'
 };
+
+// const dataset = {
+//     year: 2016,
+//     text: 'acs1216',
+//     seq_files: '122'
+// };
 
 
 const geography_file_headers = ["FILEID", "STUSAB", "SUMLEVEL", "COMPONENT", "LOGRECNO", "US",
@@ -220,23 +220,33 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
                 const keyed = {};
 
                 results.data[0].forEach((d, i) => {
+
+                    // index > 5 excludes: FILEID, FILETYPE, STUSAB, CHARITER, SEQUENCE, LOGRECNO
+                    // if(i > 5) {
+
+                    // }
                     if (i > 5 && e_or_m === 'm') {
                         keyed[seq_fields[i] + '_moe'] = d;
                     }
                     else {
                         keyed[seq_fields[i]] = d;
                     }
+
+
                 });
 
                 // combine with geo on stustab+logrecno
                 const unique_key = keyed.STUSAB + keyed.LOGRECNO;
                 const geo_record = keyed_lookup[unique_key];
 
-                // pick only GEOID and NAME (for now, TODO )from geography file
-                const picked = (({ GEOID, NAME }) => ({ GEOID, NAME }))(geo_record);
+                // pick only GEOID from geography file
+                const picked = (({ GEOID }) => ({ GEOID }))(geo_record);
+
+                // filter out the below named properties
+                const { FILEID, FILETYPE, STUSAB, CHARITER, SEQUENCE, LOGRECNO, ...filtered } = keyed;
 
                 // combine geography with data
-                const record = Object.assign({}, keyed, picked);
+                const record = Object.assign({}, filtered, picked);
 
                 // only tracts, bg, county, place, state right now
                 const sumlev = geo_record.SUMLEVEL;
@@ -276,20 +286,28 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
 
 
 function putObject(key, value) {
-    const myBucket = `s3db-v2-${dataset.text}`;
 
     return new Promise((resolve, reject) => {
-        const params = { Bucket: myBucket, Key: key, Body: Papa.unparse(value, { header: true }), ContentType: 'text/csv' };
-        s3.putObject(params, function(err, data) {
-            if (err) {
-                console.log(err);
-                return reject(err);
-            }
-            else {
-                console.log(`Successfully uploaded data to ${key}`);
-                return resolve(data);
-            }
+
+        const myBucket = `s3db-v2-${dataset.text}`;
+        const data = Papa.unparse(value, { header: true });
+
+        zlib.gzip(data, function(error, result) {
+            if (error) throw error;
+
+            const params = { Bucket: myBucket, Key: key, Body: result, ContentType: 'text/csv', ContentEncoding: 'gzip' };
+            s3.putObject(params, function(err, data) {
+                if (err) {
+                    console.log(err);
+                    return reject(err);
+                }
+                else {
+                    console.log(`Successfully uploaded data to ${key}`);
+                    return resolve(data);
+                }
+            });
         });
+
     });
 
 }
