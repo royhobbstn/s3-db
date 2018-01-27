@@ -14,17 +14,17 @@ const path = require('path');
 const Papa = require('papaparse');
 const zlib = require('zlib');
 
-// const dataset = {
-//     year: 2014,
-//     text: 'acs1014',
-//     seq_files: '121'
-// };
-
 const dataset = {
-    year: 2015,
-    text: 'acs1115',
-    seq_files: '122'
+    year: 2014,
+    text: 'acs1014',
+    seq_files: '121'
 };
+
+// const dataset = {
+//     year: 2015,
+//     text: 'acs1115',
+//     seq_files: '122'
+// };
 
 // const dataset = {
 //     year: 2016,
@@ -186,13 +186,14 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
 
                 Object.keys(data_cache).forEach(sequence => {
                     Object.keys(data_cache[sequence]).forEach(sumlev => {
-                        Object.keys(data_cache[sequence][sumlev]).forEach(state => {
-                            const filename = `${sequence}/${sumlev}/${state}.csv`;
-                            const data = data_cache[sequence][sumlev][state];
+                        Object.keys(data_cache[sequence][sumlev]).forEach(aggregator => {
+                            const filename = `${sequence}/${sumlev}/${aggregator}.csv`;
+                            const data = data_cache[sequence][sumlev][aggregator];
                             put_object_array.push({ filename, data });
                         });
                     });
                 });
+
 
                 // run up to 5 AWS PutObject calls concurrently
                 Promise.map(put_object_array, function(obj) {
@@ -260,6 +261,27 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
                 }
 
                 const state = geo_record.STATE;
+                const statecounty = `${geo_record.STATE}${geo_record.COUNTY}`;
+
+                let aggregator;
+
+                // aggregation level of each geography
+                switch (sumlev) {
+                    case '140':
+                    case '150':
+                        aggregator = statecounty;
+                        break;
+                    case '160':
+                    case '050':
+                    case '040':
+                        aggregator = state;
+                        break;
+                    default:
+                        console.log(sumlev);
+                        console.error('unknown summary level');
+                        break;
+                }
+
                 const sequence = file.slice(2, 3) + file.split('.')[0].slice(-6, -3);
 
 
@@ -271,12 +293,15 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
                     data_cache[sequence][sumlev] = {};
                 }
 
-                if (!data_cache[sequence][sumlev][state]) {
-                    data_cache[sequence][sumlev][state] = [];
+                if (!data_cache[sequence][sumlev][aggregator]) {
+                    data_cache[sequence][sumlev][aggregator] = [];
                 }
 
-                // this is how the data will be modeled in S3		
-                data_cache[sequence][sumlev][state].push(record);
+                // this is how the data will be modeled in S3
+                data_cache[sequence][sumlev][aggregator].push(record);
+
+                // if you later want a keyed object
+                // data_cache[sequence][sumlev][aggregator][geoid] = record;
 
             }
         });
