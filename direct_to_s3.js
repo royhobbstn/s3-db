@@ -14,11 +14,11 @@ const path = require('path');
 const Papa = require('papaparse');
 const zlib = require('zlib');
 
-const dataset = {
-    year: 2014,
-    text: 'acs1014',
-    seq_files: '121'
-};
+// const dataset = {
+//     year: 2014,
+//     text: 'acs1014',
+//     seq_files: '121'
+// };
 
 // const dataset = {
 //     year: 2015,
@@ -26,11 +26,11 @@ const dataset = {
 //     seq_files: '122'
 // };
 
-// const dataset = {
-//     year: 2016,
-//     text: 'acs1216',
-//     seq_files: '122'
-// };
+const dataset = {
+    year: 2016,
+    text: 'acs1216',
+    seq_files: '122'
+};
 
 
 const geography_file_headers = ["FILEID", "STUSAB", "SUMLEVEL", "COMPONENT", "LOGRECNO", "US",
