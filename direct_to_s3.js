@@ -20,17 +20,17 @@ const zlib = require('zlib');
 //     seq_files: '121'
 // };
 
-// const dataset = {
-//     year: 2015,
-//     text: 'acs1115',
-//     seq_files: '122'
-// };
-
 const dataset = {
-    year: 2016,
-    text: 'acs1216',
+    year: 2015,
+    text: 'acs1115',
     seq_files: '122'
 };
+
+// const dataset = {
+//     year: 2016,
+//     text: 'acs1216',
+//     seq_files: '122'
+// };
 
 
 const geography_file_headers = ["FILEID", "STUSAB", "SUMLEVEL", "COMPONENT", "LOGRECNO", "US",
@@ -187,7 +187,7 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
                 Object.keys(data_cache).forEach(sequence => {
                     Object.keys(data_cache[sequence]).forEach(sumlev => {
                         Object.keys(data_cache[sequence][sumlev]).forEach(aggregator => {
-                            const filename = `${sequence}/${sumlev}/${aggregator}.csv`;
+                            const filename = `${sequence}/${sumlev}/${aggregator}.json`;
                             const data = data_cache[sequence][sumlev][aggregator];
                             put_object_array.push({ filename, data });
                         });
@@ -260,6 +260,7 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
                     return;
                 }
 
+                const geoid = geo_record.GEOID;
                 const state = geo_record.STATE;
                 const statecounty = `${geo_record.STATE}${geo_record.COUNTY}`;
 
@@ -298,10 +299,7 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
                 }
 
                 // this is how the data will be modeled in S3
-                data_cache[sequence][sumlev][aggregator].push(record);
-
-                // if you later want a keyed object
-                // data_cache[sequence][sumlev][aggregator][geoid] = record;
+                data_cache[sequence][sumlev][aggregator][geoid] = record;
 
             }
         });
@@ -315,12 +313,11 @@ function putObject(key, value) {
     return new Promise((resolve, reject) => {
 
         const myBucket = `s3db-v2-${dataset.text}`;
-        const data = Papa.unparse(value, { header: true });
 
-        zlib.gzip(data, function(error, result) {
+        zlib.gzip(JSON.stringify(value), function(error, result) {
             if (error) throw error;
 
-            const params = { Bucket: myBucket, Key: key, Body: result, ContentType: 'text/csv', ContentEncoding: 'gzip' };
+            const params = { Bucket: myBucket, Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
             s3.putObject(params, function(err, data) {
                 if (err) {
                     console.log(err);
