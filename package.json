@@ -24,6 +24,8 @@
     "csvtojson": "^1.1.9",
     "papaparse": "^4.3.6",
     "request": "^2.83.0",
+    "request-promise": "^4.2.2",
+    "request-retry": "^1.0.0",
     "requestretry": "^1.12.2",
     "rimraf": "^2.6.2",
     "tar": "^4.2.0",

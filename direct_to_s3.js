@@ -4,6 +4,7 @@ const argv = require('yargs').argv;
 const states = require('./modules/states');
 const Promise = require('bluebird');
 const request = require('requestretry');
+const rp = require('request-promise');
 const fs = require('fs');
 const unzip = require('unzip');
 const csv = require('csvtojson');
@@ -17,20 +18,26 @@ const zlib = require('zlib');
 // const dataset = {
 //     year: 2014,
 //     text: 'acs1014',
-//     seq_files: '121'
+//     seq_files: '121',
+//     clusters: 'c500',
+//     cluster_bucket: 'small-tiles'
+// };
+
+// const dataset = {
+//     year: 2015,
+//     text: 'acs1115',
+//     seq_files: '122',
+//     clusters: 'c500',
+//     cluster_bucket: 'small-tiles'
 // };
 
 const dataset = {
-    year: 2015,
-    text: 'acs1115',
-    seq_files: '122'
+    year: 2016,
+    text: 'acs1216',
+    seq_files: '122',
+    clusters: 'c500',
+    cluster_bucket: 'small-tiles'
 };
-
-// const dataset = {
-//     year: 2016,
-//     text: 'acs1216',
-//     seq_files: '122'
-// };
 
 
 const geography_file_headers = ["FILEID", "STUSAB", "SUMLEVEL", "COMPONENT", "LOGRECNO", "US",
@@ -74,7 +81,10 @@ readyWorkspace()
         return parseGeofiles();
     })
     .then(() => {
-        return loadDataToS3();
+        return getClusterInfo();
+    })
+    .then((cluster_lookup) => {
+        return loadDataToS3(cluster_lookup);
     })
     .then(() => {
         console.log('program complete');
@@ -86,6 +96,37 @@ readyWorkspace()
 
 
 /**************************/
+
+function getClusterInfo() {
+
+    // Load cluster files for each geographic level;
+
+    const promises = ['bg', 'tract', 'place', 'county', 'state'].map(geo => {
+        return rp({
+            method: 'get',
+            uri: `https://s3-us-west-2.amazonaws.com/${dataset.cluster_bucket}/clusters_${dataset.year}_${geo}.json`,
+            headers: {
+                'Accept-Encoding': 'gzip',
+            },
+            gzip: true,
+            json: true,
+            fullResponse: false
+        });
+    });
+
+    return Promise.all(promises)
+        .then(data => {
+
+            const arr = data.map(d => {
+                return d[dataset.clusters];
+            });
+
+            // parse into one master object with all geoids
+            return Object.assign({}, ...arr);
+
+        });
+
+}
 
 function renameAndMoveFiles() {
     return new Promise((resolve, reject) => {
@@ -126,7 +167,7 @@ function renameAndMoveFiles() {
 }
 
 
-function loadDataToS3() {
+function loadDataToS3(cluster_lookup) {
 
     // load schemas file into memory
     const schemas = JSON.parse(fs.readFileSync('./CensusDL/geofile/schemas.json'));
@@ -159,7 +200,7 @@ function loadDataToS3() {
 
                 const keyed_lookup = JSON.parse(fs.readFileSync(`./CensusDL/geofile/g${dataset.year}5${state}.json`, 'utf8'));
 
-                await parseFile(file_data, file, schemas, keyed_lookup, e_or_m);
+                await parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_lookup);
                 console.log(`done with: ${file}`);
             });
             console.log('Done');
@@ -173,7 +214,7 @@ function loadDataToS3() {
 
 
 
-function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
+function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_lookup) {
     return new Promise((resolve, reject) => {
         const data_cache = {};
 
@@ -240,14 +281,8 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
                 const unique_key = keyed.STUSAB + keyed.LOGRECNO;
                 const geo_record = keyed_lookup[unique_key];
 
-                // pick only GEOID from geography file
-                const picked = (({ GEOID }) => ({ GEOID }))(geo_record);
-
                 // filter out the below named properties
-                const { FILEID, FILETYPE, STUSAB, CHARITER, SEQUENCE, LOGRECNO, ...filtered } = keyed;
-
-                // combine geography with data
-                const record = Object.assign({}, filtered, picked);
+                const { FILEID, FILETYPE, STUSAB, CHARITER, SEQUENCE, LOGRECNO, ...record } = keyed;
 
                 // only tracts, bg, county, place, state right now
                 const sumlev = geo_record.SUMLEVEL;
@@ -295,7 +330,7 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m) {
                 }
 
                 if (!data_cache[sequence][sumlev][aggregator]) {
-                    data_cache[sequence][sumlev][aggregator] = [];
+                    data_cache[sequence][sumlev][aggregator] = {};
                 }
 
                 // this is how the data will be modeled in S3
