@@ -17,7 +17,7 @@ const zlib = require('zlib');
 
 // const dataset = {
 //     year: 2014,
-//     text: 'acs1014',
+//     text: '1014',
 //     seq_files: '121',
 //     clusters: 'c500',
 //     cluster_bucket: 'small-tiles'
@@ -25,7 +25,7 @@ const zlib = require('zlib');
 
 // const dataset = {
 //     year: 2015,
-//     text: 'acs1115',
+//     text: '1115',
 //     seq_files: '122',
 //     clusters: 'c500',
 //     cluster_bucket: 'small-tiles'
@@ -33,7 +33,7 @@ const zlib = require('zlib');
 
 const dataset = {
     year: 2016,
-    text: 'acs1216',
+    text: '1216',
     seq_files: '122',
     clusters: 'c500',
     cluster_bucket: 'small-tiles'
@@ -227,9 +227,9 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
 
                 Object.keys(data_cache).forEach(sequence => {
                     Object.keys(data_cache[sequence]).forEach(sumlev => {
-                        Object.keys(data_cache[sequence][sumlev]).forEach(aggregator => {
-                            const filename = `${sequence}/${sumlev}/${aggregator}.json`;
-                            const data = data_cache[sequence][sumlev][aggregator];
+                        Object.keys(data_cache[sequence][sumlev]).forEach(cluster => {
+                            const filename = `${sequence}/${sumlev}/${cluster}.json`;
+                            const data = data_cache[sequence][sumlev][cluster];
                             put_object_array.push({ filename, data });
                         });
                     });
@@ -284,6 +284,18 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
                 // filter out the below named properties
                 const { FILEID, FILETYPE, STUSAB, CHARITER, SEQUENCE, LOGRECNO, ...record } = keyed;
 
+                // convert all values to numbers (instead of strings)
+                const num_record = Object.keys(record).reduce((acc, key) => {
+
+                    // assign null if empty or '.' (sample size too small)
+                    const num_key = (record[key] === '' || record[key] === '.') ? null : Number(record[key]);
+
+                    return Object.assign({}, acc, {
+                        [key]: num_key
+                    });
+                }, {});
+
+
                 // only tracts, bg, county, place, state right now
                 const sumlev = geo_record.SUMLEVEL;
 
@@ -296,30 +308,39 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
                 }
 
                 const geoid = geo_record.GEOID;
-                const state = geo_record.STATE;
-                const statecounty = `${geo_record.STATE}${geo_record.COUNTY}`;
 
-                let aggregator;
+                let parsed_geoid = "";
 
-                // aggregation level of each geography
-                switch (sumlev) {
-                    case '140':
-                    case '150':
-                        aggregator = statecounty;
-                        break;
-                    case '160':
-                    case '050':
-                    case '040':
-                        aggregator = state;
-                        break;
-                    default:
-                        console.log(sumlev);
-                        console.error('unknown summary level');
-                        break;
+                if (sumlev === '040') {
+                    parsed_geoid = geoid.slice(-2);
+                }
+                else if (sumlev === '050') {
+                    parsed_geoid = geoid.slice(-5);
+                }
+                else if (sumlev === '140') {
+                    parsed_geoid = geoid.slice(-11);
+                }
+                else if (sumlev === '150') {
+                    parsed_geoid = geoid.slice(-12);
+                }
+                else if (sumlev === '160') {
+                    parsed_geoid = geoid.slice(-7);
+                }
+                else {
+                    console.error('unknown geography');
+                    console.log(geoid);
+                    console.log(sumlev);
+                    process.exit();
                 }
 
-                const sequence = file.slice(2, 3) + file.split('.')[0].slice(-6, -3);
+                const cluster = cluster_lookup[parsed_geoid];
 
+                // some geographies are in the census, but not in the geography file.
+                // we will keep these in special aggregation files prefixed with 'undef_'
+                const agg_cluster = cluster === undefined ? `undef_${geo_record.STATE}` : cluster;
+
+
+                const sequence = file.slice(2, 3) + file.split('.')[0].slice(-6, -3);
 
                 if (!data_cache[sequence]) {
                     data_cache[sequence] = {};
@@ -329,12 +350,12 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
                     data_cache[sequence][sumlev] = {};
                 }
 
-                if (!data_cache[sequence][sumlev][aggregator]) {
-                    data_cache[sequence][sumlev][aggregator] = {};
+                if (!data_cache[sequence][sumlev][agg_cluster]) {
+                    data_cache[sequence][sumlev][agg_cluster] = {};
                 }
 
                 // this is how the data will be modeled in S3
-                data_cache[sequence][sumlev][aggregator][geoid] = record;
+                data_cache[sequence][sumlev][agg_cluster][geoid] = num_record;
 
             }
         });
@@ -347,7 +368,7 @@ function putObject(key, value) {
 
     return new Promise((resolve, reject) => {
 
-        const myBucket = `s3db-v2-${dataset.text}`;
+        const myBucket = `s3db-acs-${dataset.text}`;
 
         zlib.gzip(JSON.stringify(value), function(error, result) {
             if (error) throw error;
