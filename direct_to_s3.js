@@ -23,21 +23,21 @@ const zlib = require('zlib');
 //     cluster_bucket: 'small-tiles'
 // };
 
-// const dataset = {
-//     year: 2015,
-//     text: '1115',
-//     seq_files: '122',
-//     clusters: 'c500',
-//     cluster_bucket: 'small-tiles'
-// };
-
 const dataset = {
-    year: 2016,
-    text: '1216',
+    year: 2015,
+    text: '1115',
     seq_files: '122',
     clusters: 'c500',
     cluster_bucket: 'small-tiles'
 };
+
+// const dataset = {
+//     year: 2016,
+//     text: '1216',
+//     seq_files: '122',
+//     clusters: 'c500',
+//     cluster_bucket: 'small-tiles'
+// };
 
 
 const geography_file_headers = ["FILEID", "STUSAB", "SUMLEVEL", "COMPONENT", "LOGRECNO", "US",
@@ -85,6 +85,10 @@ readyWorkspace()
     })
     .then((cluster_lookup) => {
         return loadDataToS3(cluster_lookup);
+    })
+    .then(() => {
+        // TODO sync directory structure to S3
+        return true;
     })
     .then(() => {
         console.log('program complete');
@@ -213,6 +217,14 @@ function loadDataToS3(cluster_lookup) {
 }
 
 
+function ensureDirectoryExistence(filePath) {
+    var dirname = path.dirname(filePath);
+    if (fs.existsSync(dirname)) {
+        return true;
+    }
+    ensureDirectoryExistence(dirname);
+    fs.mkdirSync(dirname);
+}
 
 function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_lookup) {
     return new Promise((resolve, reject) => {
@@ -225,23 +237,33 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
 
                 let put_object_array = [];
 
-                Object.keys(data_cache).forEach(sequence => {
-                    Object.keys(data_cache[sequence]).forEach(sumlev => {
-                        Object.keys(data_cache[sequence][sumlev]).forEach(cluster => {
-                            const filename = `${sequence}/${sumlev}/${cluster}.json`;
-                            const data = data_cache[sequence][sumlev][cluster];
-                            put_object_array.push({ filename, data });
+                Object.keys(data_cache).forEach(attr => {
+                    Object.keys(data_cache[attr]).forEach(sumlev => {
+                        Object.keys(data_cache[attr][sumlev]).forEach(cluster => {
+                            // write to directory, sync to S3 later
+
+                            const filename = `./CensusDL/output/${attr}/${sumlev}/${cluster}.json`;
+                            const data = JSON.stringify(data_cache[attr][sumlev][cluster]);
+
+                            const promise = new Promise((resolve, reject) => {
+                                ensureDirectoryExistence(filename);
+
+                                fs.writeFile(filename, data, 'utf8', function(err) {
+                                    if (err) {
+                                        return reject(err);
+                                    }
+                                    resolve('done');
+                                });
+                            });
+
+                            put_object_array.push(promise);
                         });
                     });
                 });
 
-
-                // run up to 5 AWS PutObject calls concurrently
-                Promise.map(put_object_array, function(obj) {
-                    return putObject(obj.filename, obj.data);
-                }, { concurrency: 5 }).then(d => {
-                    console.log(`inserted: ${d.length} objects into S3`);
-                    console.log("Finished");
+                // after all files (attributes) saved to directory, move on to next file
+                Promise.all(put_object_array).then(d => {
+                    console.log(`saved: ${d.length} files into staging directory`);
                     resolve(`finished: ${file}`);
                 }).catch(err => {
                     reject(err);
@@ -259,42 +281,10 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
 
                 const seq_string = file.split('.')[0].slice(-6, -3);
                 const seq_fields = schemas[seq_string];
-                const keyed = {};
 
-                results.data[0].forEach((d, i) => {
-
-                    // index > 5 excludes: FILEID, FILETYPE, STUSAB, CHARITER, SEQUENCE, LOGRECNO
-                    // if(i > 5) {
-
-                    // }
-                    if (i > 5 && e_or_m === 'm') {
-                        keyed[seq_fields[i] + '_moe'] = d;
-                    }
-                    else {
-                        keyed[seq_fields[i]] = d;
-                    }
-
-
-                });
-
-                // combine with geo on stustab+logrecno
-                const unique_key = keyed.STUSAB + keyed.LOGRECNO;
+                // combine with geo on stustab(2)+logrecno(5)
+                const unique_key = results.data[0][2] + results.data[0][5];
                 const geo_record = keyed_lookup[unique_key];
-
-                // filter out the below named properties
-                const { FILEID, FILETYPE, STUSAB, CHARITER, SEQUENCE, LOGRECNO, ...record } = keyed;
-
-                // convert all values to numbers (instead of strings)
-                const num_record = Object.keys(record).reduce((acc, key) => {
-
-                    // assign null if empty or '.' (sample size too small)
-                    const num_key = (record[key] === '' || record[key] === '.') ? null : Number(record[key]);
-
-                    return Object.assign({}, acc, {
-                        [key]: num_key
-                    });
-                }, {});
-
 
                 // only tracts, bg, county, place, state right now
                 const sumlev = geo_record.SUMLEVEL;
@@ -336,26 +326,39 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
                 const cluster = cluster_lookup[parsed_geoid];
 
                 // some geographies are in the census, but not in the geography file.
-                // we will keep these in special aggregation files prefixed with 'undef_'
-                const agg_cluster = cluster === undefined ? `undef_${geo_record.STATE}` : cluster;
-
-
-                const sequence = file.slice(2, 3) + file.split('.')[0].slice(-6, -3);
-
-                if (!data_cache[sequence]) {
-                    data_cache[sequence] = {};
+                // we will keep ignore these
+                if (cluster === undefined) {
+                    return;
                 }
 
-                if (!data_cache[sequence][sumlev]) {
-                    data_cache[sequence][sumlev] = {};
-                }
+                results.data[0].forEach((d, i) => {
 
-                if (!data_cache[sequence][sumlev][agg_cluster]) {
-                    data_cache[sequence][sumlev][agg_cluster] = {};
-                }
+                    if (i <= 5) {
+                        // index > 5 excludes: FILEID, FILETYPE, STUSAB, CHARITER, SEQUENCE, LOGRECNO
+                        return;
+                    }
 
-                // this is how the data will be modeled in S3
-                data_cache[sequence][sumlev][agg_cluster][geoid] = num_record;
+                    const attr = (e_or_m === 'm') ? seq_fields[i] + '_moe' : seq_fields[i];
+
+                    if (!data_cache[attr]) {
+                        data_cache[attr] = {};
+                    }
+
+                    if (!data_cache[attr][sumlev]) {
+                        data_cache[attr][sumlev] = {};
+                    }
+
+                    if (!data_cache[attr][sumlev][cluster]) {
+                        data_cache[attr][sumlev][cluster] = {};
+                    }
+
+                    const num_key = (d === '' || d === '.') ? null : Number(d);
+
+                    // this is how the data will be modeled in S3
+                    data_cache[attr][sumlev][cluster][parsed_geoid] = num_key;
+
+
+                });
 
             }
         });
@@ -491,7 +494,7 @@ function readyWorkspace() {
             // logic to set up directories
             const directories_in_order = ['./CensusDL', './CensusDL/group1',
                 './CensusDL/group2', './CensusDL/stage1', './CensusDL/stage2',
-                './CensusDL/ready', './CensusDL/geofile'
+                './CensusDL/ready', './CensusDL/geofile', './CensusDL/output'
             ];
 
             directories_in_order.forEach(dir => {
