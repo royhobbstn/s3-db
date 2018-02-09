@@ -19,24 +19,24 @@ const zlib = require('zlib');
 //     year: 2014,
 //     text: '1014',
 //     seq_files: '121',
-//     clusters: 'c500',
-//     cluster_bucket: 'small-tiles'
+//     clusters: 'c2000',
+//     cluster_bucket: 'geography-tiles'
 // };
 
 const dataset = {
     year: 2015,
     text: '1115',
     seq_files: '122',
-    clusters: 'c500',
-    cluster_bucket: 'small-tiles'
+    clusters: 'c2000',
+    cluster_bucket: 'geography-tiles'
 };
 
 // const dataset = {
 //     year: 2016,
 //     text: '1216',
 //     seq_files: '122',
-//     clusters: 'c500',
-//     cluster_bucket: 'small-tiles'
+//     clusters: 'c2000',
+//     cluster_bucket: 'geography-tiles'
 // };
 
 
@@ -87,11 +87,8 @@ readyWorkspace()
         return loadDataToS3(cluster_lookup);
     })
     .then(() => {
-        // TODO sync directory structure to S3
-        return true;
-    })
-    .then(() => {
         console.log('program complete');
+        console.log('run another program to aggregate data to a folder structure and sync to s3');
     })
     .catch(err => {
         console.log(err);
@@ -195,6 +192,12 @@ function loadDataToS3(cluster_lookup) {
         // parse estimate files
         const start = async() => {
             await asyncForEach(files, async(file) => {
+
+                // TODO temp while testing
+                if (file.slice(-11) !== '0001000.txt') {
+                    return;
+                }
+
                 console.log(`reading: ${file}`);
                 const file_data = fs.readFileSync(path.join(__dirname, `./CensusDL/ready/${file}`), { encoding: 'binary' });
                 console.log(`parsing: ${file}`);
@@ -216,16 +219,6 @@ function loadDataToS3(cluster_lookup) {
 
 }
 
-
-function ensureDirectoryExistence(filePath) {
-    var dirname = path.dirname(filePath);
-    if (fs.existsSync(dirname)) {
-        return true;
-    }
-    ensureDirectoryExistence(dirname);
-    fs.mkdirSync(dirname);
-}
-
 function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_lookup) {
     return new Promise((resolve, reject) => {
         const data_cache = {};
@@ -236,17 +229,17 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
             complete: function() {
 
                 let put_object_array = [];
+                const file_state = file.slice(8, 10);
 
                 Object.keys(data_cache).forEach(attr => {
                     Object.keys(data_cache[attr]).forEach(sumlev => {
                         Object.keys(data_cache[attr][sumlev]).forEach(cluster => {
                             // write to directory, sync to S3 later
 
-                            const filename = `./CensusDL/output/${attr}/${sumlev}/${cluster}.json`;
+                            const filename = `../output/${attr}-${sumlev}-${cluster}_${file_state}.json`;
                             const data = JSON.stringify(data_cache[attr][sumlev][cluster]);
 
                             const promise = new Promise((resolve, reject) => {
-                                ensureDirectoryExistence(filename);
 
                                 fs.writeFile(filename, data, 'utf8', function(err) {
                                     if (err) {
@@ -294,6 +287,11 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
                     return;
                 }
                 if (component !== '00') {
+                    return;
+                }
+
+                // TODO change later after testing
+                if (sumlev !== '050') {
                     return;
                 }
 

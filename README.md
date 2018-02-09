@@ -19,7 +19,7 @@ nvm install node
 *Create a separate folder and download the repo to each folder*
 
 ```
-mkdir 1 2 3 4 5 6 7 8
+mkdir 1 2 3 4 5 6 7 8 output
 
 cd 1
 git clone https://github.com/royhobbstn/s3-db.git
