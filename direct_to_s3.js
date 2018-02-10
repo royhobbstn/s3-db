@@ -236,7 +236,7 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
                         Object.keys(data_cache[attr][sumlev]).forEach(cluster => {
                             // write to directory, sync to S3 later
 
-                            const filename = `../output/${attr}-${sumlev}-${cluster}!${file_state}.json`;
+                            const filename = `../../output/${attr}-${sumlev}-${cluster}!${file_state}.json`;
                             const data = JSON.stringify(data_cache[attr][sumlev][cluster]);
 
                             const promise = new Promise((resolve, reject) => {
@@ -360,33 +360,6 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
 
             }
         });
-    });
-
-}
-
-
-function putObject(key, value) {
-
-    return new Promise((resolve, reject) => {
-
-        const myBucket = `s3db-acs-${dataset.text}`;
-
-        zlib.gzip(JSON.stringify(value), function(error, result) {
-            if (error) throw error;
-
-            const params = { Bucket: myBucket, Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
-            s3.putObject(params, function(err, data) {
-                if (err) {
-                    console.log(err);
-                    return reject(err);
-                }
-                else {
-                    console.log(`Successfully uploaded data to ${key}`);
-                    return resolve(data);
-                }
-            });
-        });
-
     });
 
 }
