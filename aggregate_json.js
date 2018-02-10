@@ -1,16 +1,11 @@
 const fs = require('fs');
-const rimraf = require('rimraf');
 const mkdirp = require('mkdirp');
 const glob = require('glob');
 const Promise = require('bluebird');
 const zlib = require('zlib');
 
-const OUTPUT = '../output';
-const ROOT = '../outputSync/';
-
-
-rimraf.sync(`${ROOT}`);
-fs.mkdirSync(`${ROOT}`);
+const OUTPUT = './output';
+const ROOT = './outputSync/';
 
 
 fs.readdir(`${OUTPUT}`, (err, files) => {
@@ -95,10 +90,11 @@ function getAggregateBundles(aggregate_prefixes) {
 }
 
 function aggregateJsonFiles(bundle) {
+    console.log(bundle);
 
     const file_text = bundle.map(file => {
         return new Promise((resolve, reject) => {
-            fs.readFile(`${OUTPUT}/${file}`, (err, data) => {
+            fs.readFile(`${file}`, (err, data) => {
 
                 if (err) {
                     console.log(err);

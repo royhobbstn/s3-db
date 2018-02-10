@@ -31,6 +31,10 @@ cd ..
 # node --max_old_space_size=4096 direct_to_s3.js sd tn tx ut vt va wa
 # node --max_old_space_size=4096 direct_to_s3.js wv wi wy us
 
+cd ..
+
+#calls aggregate_json
+node --max_old_space_size=16384 aggregate_json.js
 
 # sync to s3
-# aws s3 sync ../outputSync s3://s3db-acs-1115
+aws s3 sync ./outputSync s3://s3db-acs-1115
