@@ -16,7 +16,12 @@ fs.readdir(`${OUTPUT}`, (err, files) => {
 
     const aggregate_prefixes = getAggregatePrefixes(files);
 
+    console.log('aggregated prefixes');
+    console.log('number of prefixes: ' + aggregate_prefixes.length);
+
     makeNeededDirectories(aggregate_prefixes);
+
+    console.log('made directories');
 
     aggregateJson(aggregate_prefixes).then((filenames) => {
         console.log(`${filenames.length} files written`);
@@ -37,12 +42,17 @@ function getAggregatePrefixes(files) {
 }
 
 function makeNeededDirectories(prefixes) {
-    //
+    // take all prefixes, remove cluster portion to get a list of all directories needed
+
     const remove_cluster = prefixes.map(prefix => {
         return prefix.split('-').slice(0, -1).join('-');
     });
 
-    Array.from(new Set(remove_cluster)).forEach(prefix => {
+    const uniques = Array.from(new Set(remove_cluster));
+
+    console.log('making ' + uniques.length + ' new directories');
+
+    uniques.forEach(prefix => {
 
         const split_path = prefix.split('-');
 
@@ -55,88 +65,76 @@ function makeNeededDirectories(prefixes) {
 
 function aggregateJson(aggregate_prefixes) {
     //
+    console.log('begin aggregateJSON');
 
-    const aggregate_bundles = getAggregateBundles(aggregate_prefixes);
 
-    return Promise.all(aggregate_bundles).then(bundles => {
-        //
-        return Promise.map(bundles, bundle => {
-            return aggregateJsonFiles(bundle);
-        }, { concurrency: 5 });
-    }).catch(err => {
-        // catch all promise chain errors here and end program
-        console.log(err);
-        process.exit();
-    });
+    return Promise.map(aggregate_prefixes, prefix => {
 
-}
+        console.log('prefix: ' + prefix);
 
-function getAggregateBundles(aggregate_prefixes) {
-    //
-    return aggregate_prefixes.map(prefix => {
-        //
+        // work on one prefix at a time to avoid loading too much data into memory
+
         return new Promise((resolve, reject) => {
-            //
+            // create a list of all files that match the prefix pattern (a glob of files)
+
             glob(`${OUTPUT}/${prefix}*`, {}, function(err, files) {
                 if (err) {
                     console.log(err);
                     return reject(err);
                 }
-                resolve(files);
-            });
-            //
-        });
-    });
-}
 
-function aggregateJsonFiles(bundle) {
-    console.log(bundle);
+                console.log('glob: ', files);
 
-    const file_text = bundle.map(file => {
-        return new Promise((resolve, reject) => {
-            fs.readFile(`${file}`, (err, data) => {
+                // for each file in the glob, read it, parse it as a JSON object
+                const file_text = files.map(file => {
+                    return new Promise((resolve, reject) => {
+                        fs.readFile(`${file}`, (err, data) => {
 
-                if (err) {
-                    console.log(err);
-                    return reject(err);
-                }
-                resolve(JSON.parse(data));
-            });
-        });
-    });
+                            if (err) {
+                                console.log(err);
+                                return reject(err);
+                            }
+                            resolve(JSON.parse(data));
+                        });
+                    });
+                });
 
-    return Promise.all(file_text).then(json => {
-        // merge all JSON together
-        const merged_json = Object.assign({}, ...json);
+                Promise.all(file_text).then(json => {
+                    // merge all JSON from the glob together
+                    const merged_json = Object.assign({}, ...json);
 
-        // re-derive final name from bundle entry
-        const destination_path = bundle[0]
-            .replace(OUTPUT, ROOT.slice(0, -1))
-            .split('-')
-            .join('/')
-            .split('!')[0] + '.json';
+                    // re-derive final name from bundle entry
+                    const destination_path = files[0]
+                        .replace(OUTPUT, ROOT.slice(0, -1))
+                        .split('-')
+                        .join('/')
+                        .split('!')[0] + '.json';
 
-        console.log(destination_path);
+                    // combined data will be stored at this path
+                    console.log(destination_path);
 
-        return new Promise((resolve, reject) => {
-            zlib.gzip(JSON.stringify(merged_json), function(error, result) {
-                if (error) {
-                    console.log(error);
-                    return reject(error);
-                }
+                    zlib.gzip(JSON.stringify(merged_json), function(error, result) {
+                        if (error) {
+                            console.log(error);
+                            return reject(error);
+                        }
 
-                fs.writeFile(destination_path, result, err => {
-                    if (err) {
-                        console.log(err);
-                        return reject(err);
-                    }
-                    return resolve(destination_path);
+                        fs.writeFile(destination_path, result, err => {
+                            if (err) {
+                                console.log(err);
+                                return reject(err);
+                            }
+                            return resolve(destination_path);
+                        });
+
+                    });
+
                 });
 
             });
+
         });
 
-    });
-
+    }, { concurrency: 200 });
 
 }

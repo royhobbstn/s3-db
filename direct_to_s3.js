@@ -18,15 +18,8 @@ if (argv._.length === 0) {
     process.exit();
 }
 
-let loop_states;
-
-if (argv._.length === 1) {
-    // if no states entered as parameters, use all states
-    loop_states = Object.keys(states);
-}
-else if (argv._.length > 1) {
-    loop_states = argv._.slice(1);
-}
+// if no states entered as parameters, use all states, else use states sent as args
+const loop_states = (argv._.length === 1) ? loop_states = Object.keys(states) : loop_states = argv._.slice(1);
 
 const YEAR = argv._[0];
 

@@ -36,7 +36,7 @@ loopstates="$@"
 fi
 
 
-rm -rf output outputSync 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20
+rm -rf output outputSync 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52
 
 
 sudo yum install -y git
@@ -55,48 +55,37 @@ i=0
 for var in ${loopstates[@]}; do
     i=$[i + 1]
     echo "working on $var"
-    echo $i
-    #read_cfg cfgA &
-    
+
     # Create a separate folder and download the repo to each folder
     mkdir $i
     cd $i
     git clone https://github.com/royhobbstn/s3-db.git
     cd s3-db
     npm install
-    node --max_old_space_size=4096 direct_to_s3.js $var &
+    node --max_old_space_size=4096 direct_to_s3.js $year $var &
+    cd ..
     cd ..
 done
 
 wait
 
-echo "finished"
-
-exit 1
+echo "finished.  ready to aggregate"
 
 
 
-cd 1
-git clone https://github.com/royhobbstn/s3-db.git
-cd s3-db
-npm install
-node --max_old_space_size=4096 direct_to_s3.js $year al ak #az ar ca co ct
-cd ..
+# al ak az ar ca co ct
+# de dc fl ga hi id il
+# in ia ks ky la me md
+# ma mi mn ms mo mt ne
+# nv nh nj nm ny nc nd
+# oh ok or pa pr ri sc
+# sd tn tx ut vt va wa
+# wv wi wy
+# us?
 
-
-# node --max_old_space_size=4096 direct_to_s3.js al ak az ar ca co ct
-# node --max_old_space_size=4096 direct_to_s3.js de dc fl ga hi id il
-# node --max_old_space_size=4096 direct_to_s3.js in ia ks ky la me md
-# node --max_old_space_size=4096 direct_to_s3.js ma mi mn ms mo mt ne
-# node --max_old_space_size=4096 direct_to_s3.js nv nh nj nm ny nc nd
-# node --max_old_space_size=4096 direct_to_s3.js oh ok or pa pr ri sc
-# node --max_old_space_size=4096 direct_to_s3.js sd tn tx ut vt va wa
-# node --max_old_space_size=4096 direct_to_s3.js wv wi wy us
-
-cd ..
 
 #calls aggregate_json
 node --max_old_space_size=16384 aggregate_json.js
 
 # sync to s3
-aws s3 sync ./outputSync s3://s3db-acs-1115
+#aws s3 sync ./outputSync s3://s3db-acs-1115
