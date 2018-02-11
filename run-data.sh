@@ -38,49 +38,49 @@ npm install
 node --max_old_space_size=4096 direct_to_s3.js $year al ak az ar ca co ct &
 cd ../..
 
-cd 1
+cd 2
 git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
 npm install
 node --max_old_space_size=4096 direct_to_s3.js $year de dc fl ga hi id il &
 cd ../..
 
-cd 1
+cd 3
 git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
 npm install
 node --max_old_space_size=4096 direct_to_s3.js $year in ia ks ky la me md &
 cd ../..
 
-cd 1
+cd 4
 git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
 npm install
 node --max_old_space_size=4096 direct_to_s3.js $year ma mi mn ms mo mt ne &
 cd ../..
 
-cd 1
+cd 5
 git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
 npm install
 node --max_old_space_size=4096 direct_to_s3.js $year nv nh nj nm ny nc nd &
 cd ../..
 
-cd 1
+cd 6
 git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
 npm install
 node --max_old_space_size=4096 direct_to_s3.js $year oh ok or pa pr ri sc &
 cd ../..
 
-cd 1
+cd 7
 git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
 npm install
 node --max_old_space_size=4096 direct_to_s3.js $year sd tn tx ut vt va wa &
 cd ../..
 
-cd 1
+cd 8
 git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
 npm install
