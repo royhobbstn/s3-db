@@ -200,6 +200,11 @@ function loadDataToS3(cluster_lookup) {
         const start = async() => {
             await asyncForEach(files, async(file) => {
 
+                // TODO temp while testing
+                if (file.slice(-11) !== '0059000.txt') {
+                    return;
+                }
+
                 console.log(`reading: ${file}`);
                 const file_data = fs.readFileSync(path.join(__dirname, `./CensusDL/ready/${file}`), { encoding: 'binary' });
                 console.log(`parsing: ${file}`);
