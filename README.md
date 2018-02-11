@@ -3,7 +3,7 @@ Testing S3 as a read-only database with potentially hundreds of simultaneous que
 
 Requires Node 8 or higher (async await)
 
-Use a big machine!  (try c5.2xlarge)
+Use a big machine!  (try something with 8 cores and 32GB RAM)
 
 
 ```

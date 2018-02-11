@@ -27,6 +27,7 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 nvm install node
 nvm use 9
+npm install
 
 mkdir output outputSync 1 2 3 4 5 6 7 8
 

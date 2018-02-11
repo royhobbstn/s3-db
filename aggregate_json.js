@@ -83,8 +83,6 @@ function aggregateJson(aggregate_prefixes) {
                     return reject(err);
                 }
 
-                console.log('glob: ', files);
-
                 // for each file in the glob, read it, parse it as a JSON object
                 const file_text = files.map(file => {
                     return new Promise((resolve, reject) => {
@@ -110,9 +108,6 @@ function aggregateJson(aggregate_prefixes) {
                         .join('/')
                         .split('!')[0] + '.json';
 
-                    // combined data will be stored at this path
-                    console.log(destination_path);
-
                     zlib.gzip(JSON.stringify(merged_json), function(error, result) {
                         if (error) {
                             console.log(error);
@@ -135,6 +130,6 @@ function aggregateJson(aggregate_prefixes) {
 
         });
 
-    }, { concurrency: 200 });
+    }, { concurrency: 1000 });
 
 }
