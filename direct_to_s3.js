@@ -10,35 +10,52 @@ const unzip = require('unzip');
 const csv = require('csvtojson');
 const rimraf = require('rimraf');
 const AWS = require('aws-sdk');
-const s3 = new AWS.S3();
 const path = require('path');
 const Papa = require('papaparse');
-const zlib = require('zlib');
 
-// const dataset = {
-//     year: 2014,
-//     text: '1014',
-//     seq_files: '121',
-//     clusters: 'c2000',
-//     cluster_bucket: 'geography-tiles'
-// };
+if (argv._.length === 0) {
+    console.log('fatal error.  Run like: node --max_old_space_size=4096 direct_to_s3.js 2015 al az');
+    process.exit();
+}
+
+let loop_states;
+
+if (argv._.length === 1) {
+    // if no states entered as parameters, use all states
+    loop_states = Object.keys(states);
+}
+else if (argv._.length > 1) {
+    loop_states = argv._.slice(1);
+}
+
+const YEAR = argv._[0];
+
 
 const dataset = {
-    year: 2015,
-    text: '1115',
-    seq_files: '122',
-    clusters: 'c2000',
-    cluster_bucket: 'geography-tiles'
+    '2014': {
+        year: 2014,
+        text: '1014',
+        seq_files: '121',
+        clusters: 'c2000',
+        cluster_bucket: 'geography-tiles'
+    },
+
+    '2015': {
+        year: 2015,
+        text: '1115',
+        seq_files: '122',
+        clusters: 'c2000',
+        cluster_bucket: 'geography-tiles'
+    },
+
+    '2016': {
+        year: 2016,
+        text: '1216',
+        seq_files: '122',
+        clusters: 'c2000',
+        cluster_bucket: 'geography-tiles'
+    }
 };
-
-// const dataset = {
-//     year: 2016,
-//     text: '1216',
-//     seq_files: '122',
-//     clusters: 'c2000',
-//     cluster_bucket: 'geography-tiles'
-// };
-
 
 const geography_file_headers = ["FILEID", "STUSAB", "SUMLEVEL", "COMPONENT", "LOGRECNO", "US",
     "REGION", "DIVISION", "STATECE", "STATE", "COUNTY", "COUSUB", "PLACE", "TRACT", "BLKGRP", "CONCIT",
@@ -48,10 +65,7 @@ const geography_file_headers = ["FILEID", "STUSAB", "SUMLEVEL", "COMPONENT", "LO
     "GEOID", "NAME", "BTTR", "BTBG", "BLANK7"
 ];
 
-// if no states entered as parameters, use all states
-const loop_states = argv._.length ? argv._ : Object.keys(states);
 
-console.log(`Selected: ${loop_states}`);
 
 // selected states array into array of objects to facilitate downloading multiple files
 let selected_states = [];
@@ -105,7 +119,7 @@ function getClusterInfo() {
     const promises = ['bg', 'tract', 'place', 'county', 'state'].map(geo => {
         return rp({
             method: 'get',
-            uri: `https://s3-us-west-2.amazonaws.com/${dataset.cluster_bucket}/clusters_${dataset.year}_${geo}.json`,
+            uri: `https://s3-us-west-2.amazonaws.com/${dataset[YEAR].cluster_bucket}/clusters_${dataset[YEAR].year}_${geo}.json`,
             headers: {
                 'Accept-Encoding': 'gzip',
             },
@@ -119,7 +133,7 @@ function getClusterInfo() {
         .then(data => {
 
             const arr = data.map(d => {
-                return d[dataset.clusters];
+                return d[dataset[YEAR].clusters];
             });
 
             // parse into one master object with all geoids
@@ -193,11 +207,6 @@ function loadDataToS3(cluster_lookup) {
         const start = async() => {
             await asyncForEach(files, async(file) => {
 
-                // TODO temp while testing
-                if (file.slice(-11) !== '0001000.txt') {
-                    return;
-                }
-
                 console.log(`reading: ${file}`);
                 const file_data = fs.readFileSync(path.join(__dirname, `./CensusDL/ready/${file}`), { encoding: 'binary' });
                 console.log(`parsing: ${file}`);
@@ -205,7 +214,7 @@ function loadDataToS3(cluster_lookup) {
                 const state = file.slice(8, 10);
                 const e_or_m = file.slice(2, 3);
 
-                const keyed_lookup = JSON.parse(fs.readFileSync(`./CensusDL/geofile/g${dataset.year}5${state}.json`, 'utf8'));
+                const keyed_lookup = JSON.parse(fs.readFileSync(`./CensusDL/geofile/g${dataset[YEAR].year}5${state}.json`, 'utf8'));
 
                 await parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_lookup);
                 console.log(`done with: ${file}`);
@@ -290,11 +299,6 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
                     return;
                 }
 
-                // TODO change later after testing
-                if (sumlev !== '050') {
-                    return;
-                }
-
                 const geoid = geo_record.GEOID;
 
                 let parsed_geoid = "";
@@ -370,7 +374,7 @@ function parseGeofiles() {
     // in sequence read all geofiles and write a geojson file to /geofile
 
     return Promise.map(loop_states, state => {
-        const file = `./CensusDL/stage1/g${dataset.year}5${state}.csv`;
+        const file = `./CensusDL/stage1/g${dataset[YEAR].year}5${state}.csv`;
         const file_data = fs.readFileSync(file, 'utf8');
 
         return new Promise((resolve, reject) => {
@@ -381,7 +385,7 @@ function parseGeofiles() {
                 complete: function(results, file) {
                     const keyed_lookup = convertGeofile(results.data);
                     // save keyed_lookup
-                    fs.writeFileSync(`./CensusDL/geofile/g${dataset.year}5${state}.json`, JSON.stringify(keyed_lookup), 'utf8');
+                    fs.writeFileSync(`./CensusDL/geofile/g${dataset[YEAR].year}5${state}.json`, JSON.stringify(keyed_lookup), 'utf8');
                     resolve(true);
                 },
                 error: function(error, file) {
@@ -418,7 +422,7 @@ function convertGeofile(data) {
 function createSchemaFiles() {
     return new Promise((resolve, reject) => {
 
-        const url = `https://www2.census.gov/programs-surveys/acs/summary_file/${dataset.year}/documentation/user_tools/ACS_5yr_Seq_Table_Number_Lookup.txt`;
+        const url = `https://www2.census.gov/programs-surveys/acs/summary_file/${dataset[YEAR].year}/documentation/user_tools/ACS_5yr_Seq_Table_Number_Lookup.txt`;
         request(url, function(err, resp, body) {
             if (err) { return reject(err); }
 
@@ -486,7 +490,7 @@ function requestAndSaveStateFileFromACS(abbr, isTractBGFile) {
         const fileType = isTractBGFile ? '_Tracts_Block_Groups_Only' : '_All_Geographies_Not_Tracts_Block_Groups';
         const outputDir = isTractBGFile ? 'CensusDL/group1/' : 'CensusDL/group2/';
         const stageDir = isTractBGFile ? 'stage1' : 'stage2';
-        const fileUrl = `https://www2.census.gov/programs-surveys/acs/summary_file/${dataset.year}/data/5_year_by_state/${fileName}${fileType}.zip`;
+        const fileUrl = `https://www2.census.gov/programs-surveys/acs/summary_file/${dataset[YEAR].year}/data/5_year_by_state/${fileName}${fileType}.zip`;
         const outputFile = `${states[abbr]}${fileType}.zip`;
 
         console.log(`downloading ${fileName}${fileType}.zip`);

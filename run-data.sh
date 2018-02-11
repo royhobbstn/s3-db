@@ -80,7 +80,7 @@ cd 1
 git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
 npm install
-node --max_old_space_size=4096 direct_to_s3.js al ak #az ar ca co ct
+node --max_old_space_size=4096 direct_to_s3.js $year al ak #az ar ca co ct
 cd ..
 
 
