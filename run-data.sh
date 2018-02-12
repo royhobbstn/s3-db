@@ -110,4 +110,4 @@ wait
 echo "finished aggregating"
 
 # sync to s3
-aws s3 sync ./outputSync s3://s3db-acs-1115
+aws s3 sync ./outputSync s3://s3db-acs-1115 --content-type 'application/json' --content-encoding 'gzip'

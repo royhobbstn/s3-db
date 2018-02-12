@@ -201,7 +201,7 @@ function loadDataToS3(cluster_lookup) {
             await asyncForEach(files, async(file) => {
 
                 // TODO temp while testing
-                if (file.slice(-11) !== '0059000.txt') {
+                if (file.slice(-11) !== '0059000.txt' && file.slice(-11) !== '0002000.txt') {
                     return;
                 }
 
@@ -243,7 +243,7 @@ function parseFile(file_data, file, schemas, keyed_lookup, e_or_m, cluster_looku
                         Object.keys(data_cache[attr][sumlev]).forEach(cluster => {
                             // write to directory, sync to S3 later
 
-                            const filename = `../../output/${attr}-${sumlev}-${cluster}!${file_state}.json`;
+                            const filename = `../../output/${attr}-${sumlev}-${cluster}_!${file_state}.json`;
                             const data = JSON.stringify(data_cache[attr][sumlev][cluster]);
 
                             const promise = new Promise((resolve, reject) => {

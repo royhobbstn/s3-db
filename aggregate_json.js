@@ -44,7 +44,7 @@ function filterByLastCharacter(aggregate_prefixes, last_char) {
     }
 
     return aggregate_prefixes.filter(prefix => {
-        return prefix.slice(-1) === last_char;
+        return prefix.slice(-2, -1) === last_char;
     });
 }
 
@@ -97,7 +97,7 @@ function aggregateJson(aggregate_prefixes) {
         return new Promise((resolve, reject) => {
             // create a list of all files that match the prefix pattern (a glob of files)
 
-            glob(`${OUTPUT}/${prefix}*`, {}, function(err, files) {
+            glob(`${OUTPUT}/${prefix}_*`, {}, function(err, files) {
                 if (err) {
                     console.log(err);
                     return reject(err);
