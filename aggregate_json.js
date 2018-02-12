@@ -94,52 +94,54 @@ function aggregateJson(aggregate_prefixes) {
 
         // work on one prefix at a time to avoid loading too much data into memory
 
-        //return new Promise((resolve, reject) => {
-        // create a list of all files that match the prefix pattern (a glob of files)
+        return new Promise((resolve, reject) => {
+            // create a list of all files that match the prefix pattern (a glob of files)
 
-        glob(`${OUTPUT}/${prefix}*`, {}, function(err, files) {
-            if (err) {
-                console.log(err);
-                //return reject(err);
-            }
+            glob(`${OUTPUT}/${prefix}*`, {}, function(err, files) {
+                if (err) {
+                    console.log(err);
+                    return reject(err);
+                }
 
-            // for each file in the glob, read it, parse it as a JSON object
-            const file_text = files.map(file => {
-                return new Promise((resolve, reject) => {
-                    fs.readFile(`${file}`, (err, data) => {
+                // for each file in the glob, read it, parse it as a JSON object
+                const file_text = files.map(file => {
+                    return new Promise((resolve, reject) => {
+                        fs.readFile(`${file}`, (err, data) => {
 
-                        if (err) {
-                            console.log(err);
-                            return reject(err);
-                        }
-                        resolve(JSON.parse(data));
+                            if (err) {
+                                console.log(err);
+                                return reject(err);
+                            }
+                            resolve(JSON.parse(data));
+                        });
                     });
                 });
-            });
 
-            return Promise.all(file_text).then(json => {
-                // merge all JSON from the glob together
-                const merged_json = Object.assign({}, ...json);
+                Promise.all(file_text).then(json => {
+                    // merge all JSON from the glob together
+                    const merged_json = Object.assign({}, ...json);
 
-                // re-derive final name from bundle entry
-                const destination_path = files[0]
-                    .replace(OUTPUT, ROOT.slice(0, -1))
-                    .split('-')
-                    .join('/')
-                    .split('!')[0] + '.json';
+                    // re-derive final name from bundle entry
+                    const destination_path = files[0]
+                        .replace(OUTPUT, ROOT.slice(0, -1))
+                        .split('-')
+                        .join('/')
+                        .split('!')[0] + '.json';
 
-                zlib.gzip(JSON.stringify(merged_json), function(error, result) {
-                    if (error) {
-                        console.log(error);
-                        // return reject(error);
-                    }
-
-                    fs.writeFile(destination_path, result, err => {
-                        if (err) {
-                            console.log(err);
-                            //return reject(err);
+                    zlib.gzip(JSON.stringify(merged_json), function(error, result) {
+                        if (error) {
+                            console.log(error);
+                            return reject(error);
                         }
-                        //return resolve(destination_path);
+
+                        fs.writeFile(destination_path, result, err => {
+                            if (err) {
+                                console.log(err);
+                                return reject(err);
+                            }
+                            return resolve(destination_path);
+                        });
+
                     });
 
                 });
@@ -147,8 +149,6 @@ function aggregateJson(aggregate_prefixes) {
             });
 
         });
-
-        //});
 
     }, { concurrency: 100 });
 
