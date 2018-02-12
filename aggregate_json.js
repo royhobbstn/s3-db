@@ -7,6 +7,8 @@ const zlib = require('zlib');
 const OUTPUT = './output';
 const ROOT = './outputSync/';
 
+const LAST_CHAR_FILTER = process.argv[2];
+
 
 fs.readdir(`${OUTPUT}`, (err, files) => {
     if (err) {
@@ -14,22 +16,37 @@ fs.readdir(`${OUTPUT}`, (err, files) => {
         process.exit();
     }
 
+    // TODO filter out files by criteria for multithreading
+
     const aggregate_prefixes = getAggregatePrefixes(files);
 
-    console.log('aggregated prefixes');
-    console.log('number of prefixes: ' + aggregate_prefixes.length);
+    const filtered = filterByLastCharacter(aggregate_prefixes, LAST_CHAR_FILTER);
 
-    makeNeededDirectories(aggregate_prefixes);
+    console.log('aggregated prefixes');
+
+    console.log('number of prefixes: ' + aggregate_prefixes.length);
+    console.log('number of filtered: ' + filtered.length);
+
+    makeNeededDirectories(filtered);
 
     console.log('made directories');
 
-    aggregateJson(aggregate_prefixes).then((filenames) => {
+    aggregateJson(filtered).then((filenames) => {
         console.log(`${filenames.length} files written`);
         console.log('ready to sync to S3');
     });
 
 });
 
+function filterByLastCharacter(aggregate_prefixes, last_char) {
+    if (!last_char) {
+        return aggregate_prefixes;
+    }
+
+    return aggregate_prefixes.filter(prefix => {
+        return prefix.slice(-1) === last_char;
+    });
+}
 
 
 function getAggregatePrefixes(files) {
@@ -67,61 +84,62 @@ function aggregateJson(aggregate_prefixes) {
     //
     console.log('begin aggregateJSON');
 
+    let i = 0;
 
-    return Promise.map(aggregate_prefixes, prefix => {
+    return Promise.map(aggregate_prefixes, (prefix) => {
 
-        console.log('prefix: ' + prefix);
+        i++;
+
+        console.log('prefix: ' + prefix, ((i / aggregate_prefixes.length) * 100).toFixed(2) + "%");
 
         // work on one prefix at a time to avoid loading too much data into memory
 
-        return new Promise((resolve, reject) => {
-            // create a list of all files that match the prefix pattern (a glob of files)
+        //return new Promise((resolve, reject) => {
+        // create a list of all files that match the prefix pattern (a glob of files)
 
-            glob(`${OUTPUT}/${prefix}*`, {}, function(err, files) {
-                if (err) {
-                    console.log(err);
-                    return reject(err);
-                }
+        glob(`${OUTPUT}/${prefix}*`, {}, function(err, files) {
+            if (err) {
+                console.log(err);
+                //return reject(err);
+            }
 
-                // for each file in the glob, read it, parse it as a JSON object
-                const file_text = files.map(file => {
-                    return new Promise((resolve, reject) => {
-                        fs.readFile(`${file}`, (err, data) => {
+            // for each file in the glob, read it, parse it as a JSON object
+            const file_text = files.map(file => {
+                return new Promise((resolve, reject) => {
+                    fs.readFile(`${file}`, (err, data) => {
 
-                            if (err) {
-                                console.log(err);
-                                return reject(err);
-                            }
-                            resolve(JSON.parse(data));
-                        });
+                        if (err) {
+                            console.log(err);
+                            return reject(err);
+                        }
+                        resolve(JSON.parse(data));
                     });
                 });
+            });
 
-                Promise.all(file_text).then(json => {
-                    // merge all JSON from the glob together
-                    const merged_json = Object.assign({}, ...json);
+            return Promise.all(file_text).then(json => {
+                // merge all JSON from the glob together
+                const merged_json = Object.assign({}, ...json);
 
-                    // re-derive final name from bundle entry
-                    const destination_path = files[0]
-                        .replace(OUTPUT, ROOT.slice(0, -1))
-                        .split('-')
-                        .join('/')
-                        .split('!')[0] + '.json';
+                // re-derive final name from bundle entry
+                const destination_path = files[0]
+                    .replace(OUTPUT, ROOT.slice(0, -1))
+                    .split('-')
+                    .join('/')
+                    .split('!')[0] + '.json';
 
-                    zlib.gzip(JSON.stringify(merged_json), function(error, result) {
-                        if (error) {
-                            console.log(error);
-                            return reject(error);
+                zlib.gzip(JSON.stringify(merged_json), function(error, result) {
+                    if (error) {
+                        console.log(error);
+                        // return reject(error);
+                    }
+
+                    fs.writeFile(destination_path, result, err => {
+                        if (err) {
+                            console.log(err);
+                            //return reject(err);
                         }
-
-                        fs.writeFile(destination_path, result, err => {
-                            if (err) {
-                                console.log(err);
-                                return reject(err);
-                            }
-                            return resolve(destination_path);
-                        });
-
+                        //return resolve(destination_path);
                     });
 
                 });
@@ -130,6 +148,8 @@ function aggregateJson(aggregate_prefixes) {
 
         });
 
-    }, { concurrency: 1000 });
+        //});
+
+    }, { concurrency: 100 });
 
 }

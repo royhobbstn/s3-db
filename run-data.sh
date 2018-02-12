@@ -46,6 +46,8 @@ npm install
 node --max_old_space_size=4096 direct_to_s3.js $year de dc fl ga hi id il &
 cd ../..
 
+: <<'END'
+
 cd 3
 git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
@@ -89,13 +91,27 @@ npm install
 node --max_old_space_size=4096 direct_to_s3.js $year wv wi wy &
 cd ../..
 
+END
+
 wait
 
 echo "finished.  ready to aggregate"
 
-
 #calls aggregate_json
-# node --max_old_space_size=16384 aggregate_json.js
+node --max_old_space_size=4192 aggregate_json.js 0 &
+node --max_old_space_size=4192 aggregate_json.js 1 &
+node --max_old_space_size=4192 aggregate_json.js 2 &
+node --max_old_space_size=4192 aggregate_json.js 3 &
+node --max_old_space_size=4192 aggregate_json.js 4 &
+node --max_old_space_size=4192 aggregate_json.js 5 &
+node --max_old_space_size=4192 aggregate_json.js 6 &
+node --max_old_space_size=4192 aggregate_json.js 7 &
+node --max_old_space_size=4192 aggregate_json.js 8 &
+node --max_old_space_size=4192 aggregate_json.js 9 &
+
+wait
+
+echo "finished aggregating"
 
 # sync to s3
 #aws s3 sync ./outputSync s3://s3db-acs-1115
