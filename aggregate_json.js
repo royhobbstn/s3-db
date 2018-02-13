@@ -97,7 +97,7 @@ function aggregateJson(aggregate_prefixes) {
         return new Promise((resolve, reject) => {
             // create a list of all files that match the prefix pattern (a glob of files)
 
-            glob(`${OUTPUT}/${prefix}_*`, {}, function(err, files) {
+            glob(`${OUTPUT}/${prefix}*`, {}, function(err, files) {
                 if (err) {
                     console.log(err);
                     return reject(err);
