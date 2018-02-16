@@ -12,3 +12,7 @@ git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
 bash run-data.sh 2015
 ```
+
+For EMFILE errors for having too many files open at once:
+
+https://stackoverflow.com/a/11345256/8896489

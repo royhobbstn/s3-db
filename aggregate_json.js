@@ -16,8 +16,6 @@ fs.readdir(`${OUTPUT}`, (err, files) => {
         process.exit();
     }
 
-    // TODO filter out files by criteria for multithreading
-
     const aggregate_prefixes = getAggregatePrefixes(files);
 
     const filtered = filterByLastCharacter(aggregate_prefixes, LAST_CHAR_FILTER);
@@ -126,7 +124,8 @@ function aggregateJson(aggregate_prefixes) {
                         .replace(OUTPUT, ROOT.slice(0, -1))
                         .split('-')
                         .join('/')
-                        .split('!')[0] + '.json';
+                        .split('!')[0]
+                        .slice(0,-1) + '.json';
 
                     zlib.gzip(JSON.stringify(merged_json), function(error, result) {
                         if (error) {
