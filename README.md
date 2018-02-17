@@ -10,6 +10,7 @@ Use a big machine!  (try something with 8 cores and 32GB RAM)
 sudo yum install -y git
 git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
+screen
 bash run-data.sh 2015
 ```
 
