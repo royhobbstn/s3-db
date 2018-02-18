@@ -33,9 +33,9 @@ readyWorkspace()
   .then((setup_information) => {
     const schemas = setup_information[0];
     const keyed_lookup = setup_information[1];
-    const clusters = setup_information[2];
+    const cluster_lookup = setup_information[2];
     console.log('parsing ACS data');
-    return parseData(schemas, keyed_lookup, clusters);
+    return parseData(schemas, keyed_lookup, cluster_lookup);
   })
   .then(() => {
     console.log('done');
@@ -46,7 +46,164 @@ readyWorkspace()
 
 /****************/
 
-function parseData(schemas, keyed_lookup, clusters) {
+function parseData(schemas, keyed_lookup, cluster_lookup) {
+
+  // for file in directory
+
+  fs.readdir(`./CensusDL/stage`, (err, files) => {
+    if (err) {
+      console.log('error: ', err);
+      process.exit();
+    }
+    console.log(files);
+
+    const parsed_files = files.map(file => {
+      const e_or_m = file.slice(0, 1);
+
+      return new Promise((resolve, reject) => {
+        const data_cache = {};
+
+        // TODO Need to provide data here rather than a file path
+
+        Papa.parse(path.join(__dirname, 'CensusDL/stage/', file), {
+          header: false,
+          skipEmptyLines: true,
+          complete: function() {
+
+            let put_object_array = [];
+            const file_state = file.slice(8, 10);
+
+            Object.keys(data_cache).forEach(attr => {
+              Object.keys(data_cache[attr]).forEach(sumlev => {
+                Object.keys(data_cache[attr][sumlev]).forEach(cluster => {
+                  // write to directory, sync to S3 later
+
+                  const filename = `./CensusDL/output/${attr}-${sumlev}-${cluster}_!${file_state}.json`;
+                  const data = JSON.stringify(data_cache[attr][sumlev][cluster]);
+
+                  const promise = new Promise((resolve, reject) => {
+
+                    fs.writeFile(filename, data, 'utf8', function(err) {
+                      if (err) {
+                        return reject(err);
+                      }
+                      resolve('done');
+                    });
+                  });
+
+                  put_object_array.push(promise);
+                });
+              });
+            });
+
+            // after all files (attributes) saved to directory, move on to next file
+            Promise.all(put_object_array).then(d => {
+              console.log(`saved: ${d.length} files into staging directory`);
+              resolve(`finished: ${file}`);
+            }).catch(err => {
+              reject(err);
+            });
+
+          },
+          step: function(results) {
+
+            if (results.errors.length) {
+              console.log(results);
+              console.log('E: ', results.errors);
+              reject(results.errors);
+              process.exit();
+            }
+
+            const seq_string = file.split('.')[0].slice(-6, -3);
+            const seq_fields = schemas[seq_string];
+
+            // combine with geo on stustab(2)+logrecno(5)
+            const unique_key = results.data[0][2] + results.data[0][5];
+            const geo_record = keyed_lookup[unique_key];
+
+            // only tracts, bg, county, place, state right now
+            const sumlev = geo_record.slice(0, 3);
+
+            const component = geo_record.slice(3, 5);
+            if (sumlev !== '140' && sumlev !== '150' && sumlev !== '050' && sumlev !== '160' && sumlev !== '040') {
+              return;
+            }
+            if (component !== '00') {
+              return;
+            }
+
+            const geoid = geo_record.split('US')[1];
+
+            let parsed_geoid = "";
+
+            if (sumlev === '040') {
+              parsed_geoid = geoid.slice(-2);
+            }
+            else if (sumlev === '050') {
+              parsed_geoid = geoid.slice(-5);
+            }
+            else if (sumlev === '140') {
+              parsed_geoid = geoid.slice(-11);
+            }
+            else if (sumlev === '150') {
+              parsed_geoid = geoid.slice(-12);
+            }
+            else if (sumlev === '160') {
+              parsed_geoid = geoid.slice(-7);
+            }
+            else {
+              console.error('unknown geography');
+              console.log(geoid);
+              console.log(sumlev);
+              process.exit();
+            }
+
+            const cluster = cluster_lookup[parsed_geoid];
+
+            // some geographies are in the census, but not in the geography file.
+            // we will keep ignore these
+            if (cluster === undefined) {
+              return;
+            }
+
+            results.data[0].forEach((d, i) => {
+
+              if (i <= 5) {
+                // index > 5 excludes: FILEID, FILETYPE, STUSAB, CHARITER, SEQUENCE, LOGRECNO
+                return;
+              }
+
+              const attr = (e_or_m === 'm') ? seq_fields[i] + '_moe' : seq_fields[i];
+
+              if (!data_cache[attr]) {
+                data_cache[attr] = {};
+              }
+
+              if (!data_cache[attr][sumlev]) {
+                data_cache[attr][sumlev] = {};
+              }
+
+              if (!data_cache[attr][sumlev][cluster]) {
+                data_cache[attr][sumlev][cluster] = {};
+              }
+
+              const num_key = (d === '' || d === '.') ? null : Number(d);
+
+              // this is how the data will be modeled in S3
+              data_cache[attr][sumlev][cluster][parsed_geoid] = num_key;
+
+
+            });
+
+          }
+        });
+      });
+
+    });
+
+    return Promise.all(parsed_files);
+
+  });
 
 }
 
