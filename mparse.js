@@ -1,10 +1,3 @@
-// split the s3db load process into tiny self-contained pieces
-
-// also, script the entire cloud setup / deployment
-
-
-/*************/
-
 const argv = require('yargs').argv;
 const states = require('./modules/states');
 const Promise = require('bluebird');
@@ -29,12 +22,22 @@ if (argv._.length === 0) {
 const YEAR = argv._[0];
 
 
-
 readyWorkspace()
   .then(() => {
     return downloadDataFromACS();
   })
-  .then(ready => {
+  .then(() => {
+    console.log('downloading schemas, geoids, and cluster information');
+    return Promise.all([createSchemaFiles(), getGeoKey(), getClusterInfo()]);
+  })
+  .then((setup_information) => {
+    const schemas = setup_information[0];
+    const keyed_lookup = setup_information[1];
+    const clusters = setup_information[2];
+    console.log('parsing ACS data');
+    return parseData(schemas, keyed_lookup, clusters);
+  })
+  .then(() => {
     console.log('done');
   });
 
@@ -43,8 +46,94 @@ readyWorkspace()
 
 /****************/
 
-// for reference:  data is here:
-// https://www2.census.gov/programs-surveys/acs/summary_file/2015/data/5_year_seq_by_state/Alabama/All_Geographies_Not_Tracts_Block_Groups/
+function parseData(schemas, keyed_lookup, clusters) {
+
+}
+
+
+
+function getClusterInfo() {
+
+  // Load cluster files for each geographic level;
+
+  const promises = ['bg', 'tract', 'place', 'county', 'state'].map(geo => {
+    return rp({
+      method: 'get',
+      uri: `https://s3-us-west-2.amazonaws.com/${dataset[YEAR].cluster_bucket}/clusters_${dataset[YEAR].year}_${geo}.json`,
+      headers: {
+        'Accept-Encoding': 'gzip',
+      },
+      gzip: true,
+      json: true,
+      fullResponse: false
+    });
+  });
+
+  return Promise.all(promises)
+    .then(data => {
+
+      const arr = data.map(d => {
+        return d[dataset[YEAR].clusters];
+      });
+
+      // parse into one master object with all geoids
+      return Object.assign({}, ...arr);
+
+    });
+
+}
+
+
+function getGeoKey() {
+
+  return rp({
+    method: 'get',
+    uri: `https://s3-us-west-2.amazonaws.com/s3db-acs-${dataset[YEAR].text}/g${YEAR}.json`,
+    json: true,
+    fullResponse: false
+  });
+
+}
+
+
+
+function createSchemaFiles() {
+  return new Promise((resolve, reject) => {
+
+    const url = `https://www2.census.gov/programs-surveys/acs/summary_file/${YEAR}/documentation/user_tools/ACS_5yr_Seq_Table_Number_Lookup.txt`;
+    request(url, function(err, resp, body) {
+      if (err) { return reject(err); }
+
+      csv({ noheader: false })
+        .fromString(body)
+        .on('end_parsed', data => {
+
+          const fields = {};
+          // filter out line number if non-integer value
+          data.forEach(d => {
+            const line_number = Number(d['Line Number']);
+            if (Number.isInteger(line_number) && line_number > 0) {
+              const field_name = d['Table ID'] + String(d['Line Number']).padStart(3, "0");
+              const seq_num = d['Sequence Number'].slice(1);
+              if (fields[seq_num]) {
+                fields[seq_num].push(field_name);
+              }
+              else {
+                fields[seq_num] = ["FILEID", "FILETYPE", "STUSAB", "CHARITER", "SEQUENCE", "LOGRECNO", field_name];
+              }
+            }
+          });
+
+          fs.writeFileSync('./CensusDL/geofile/schemas.json', JSON.stringify(fields), 'utf8');
+          resolve(true);
+        })
+        .on('done', () => {
+          //parsing finished
+          console.log('finished parsing schema file');
+        });
+    });
+  });
+}
 
 function downloadDataFromACS() {
   const isTractBGFile = true;

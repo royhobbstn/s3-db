@@ -1,0 +1,96 @@
+// prep work before getting all census data
+
+// TODO create schema files function should go here since it's setup
+
+const Papa = require('papaparse');
+const states = require('./modules/states');
+const geography_file_headers = require('./modules/settings.js').geography_file_headers;
+const argv = require('yargs').argv;
+const rp = require('request-promise');
+const dataset = require('./modules/settings.js').dataset;
+const AWS = require('aws-sdk');
+const s3 = new AWS.S3();
+
+if (argv._.length === 0) {
+  console.log('fatal error.  Run like: node parse-geofiles.js 2015');
+  process.exit();
+}
+
+const YEAR = argv._[0];
+
+
+const all_states_parsed = Object.keys(states).map(state => {
+
+  return rp({
+    method: 'get',
+    uri: `https://www2.census.gov/programs-surveys/acs/summary_file/${YEAR}/data/5_year_seq_by_state/${states[state]}/Tracts_Block_Groups_Only/g${YEAR}5${state}.csv`,
+    fullResponse: false
+  }).then(data => {
+    return new Promise((resolve, reject) => {
+      Papa.parse(data, {
+        header: false,
+        delimiter: ',',
+        skipEmptyLines: true,
+        complete: function(results) {
+          console.log(`done: ${states[state]}`);
+          resolve(convertGeofile(results.data));
+        },
+        error: function(error, file) {
+          console.log("error:", error, file);
+          reject('nope');
+        }
+      });
+    });
+  });
+
+});
+
+
+Promise.all(all_states_parsed).then(datas => {
+  const parsed_dataset = JSON.stringify(Object.assign({}, ...datas));
+  return putObject(`g${YEAR}.json`, parsed_dataset);
+}).then(() => {
+  console.log('done');
+});
+
+
+
+/*****************/
+
+function putObject(key, value) {
+  const myBucket = `s3db-acs-${dataset[YEAR].text}`;
+
+  return new Promise((resolve, reject) => {
+    const params = { Bucket: myBucket, Key: key, Body: value, ContentType: 'application/json' };
+    s3.putObject(params, function(err, data) {
+      if (err) {
+        console.log(err);
+        return reject(err);
+      }
+      else {
+        console.log(`Successfully uploaded data to ${key}`);
+        return resolve(data);
+      }
+    });
+  });
+
+}
+
+
+function convertGeofile(data) {
+  // convert geofile to json (with field names).  convert json to key-value
+  // join key is stusab(lowercase) + logrecno
+  const keyed_lookup = {};
+
+  data.forEach(d => {
+    const obj = {};
+    d.forEach((item, index) => {
+      obj[geography_file_headers[index]] = item;
+    });
+    const stusab_lc = obj.STUSAB.toLowerCase();
+    // GEOID layout is ${SUMLEVEL}${COMPONENT}US${GEOID} - that's all we need
+    keyed_lookup[stusab_lc + obj.LOGRECNO] = obj.GEOID;
+  });
+
+  return keyed_lookup;
+}
