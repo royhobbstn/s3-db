@@ -14,11 +14,16 @@ const dataset = require('./modules/settings.js').dataset;
 const zlib = require('zlib');
 
 if (argv._.length === 0) {
-  console.log('fatal error.  Run like: node mparse.js 2015');
+  console.log('fatal error.  Run like: node mparse.js year seq a');
+  console.log('where year: 2014, 2015, 2016');
+  console.log('where seq: 001, 002, etc');
+  console.log('where a: trbg, allgeo  (tracts and block groups or all other geographies');
   process.exit();
 }
 
 const YEAR = argv._[0];
+const SEQ = argv._[1];
+const GRP = argv._[2];
 
 const data_cache = {};
 
@@ -96,9 +101,6 @@ function readDirectory() {
       if (err) {
         reject(err);
       }
-      // const filtered = files.filter(file => {
-      //   return file.slice(0, 1) === 'e';
-      // });
 
       resolve(files);
     });
@@ -121,7 +123,7 @@ function parseData(schemas, keyed_lookup, cluster_lookup, files) {
           header: false,
           skipEmptyLines: true,
           complete: function() {
-            console.log(`parse ${file}`);
+            console.log(`parsed ${file}`);
             resolve('done');
           },
           step: function(results) {
@@ -221,7 +223,7 @@ function parseData(schemas, keyed_lookup, cluster_lookup, files) {
 
     });
 
-  }, { concurrency: 10 });
+  }, { concurrency: 1 });
 
   return Promise.all(parsed_files);
 
@@ -312,14 +314,11 @@ function createSchemaFiles() {
 }
 
 function downloadDataFromACS() {
-  const isTractBGFile = false;
-  const fileType = isTractBGFile ? 'Tracts_Block_Groups_Only' : 'All_Geographies_Not_Tracts_Block_Groups';
+  const fileType = GRP === 'trbg' ? 'Tracts_Block_Groups_Only' : 'All_Geographies_Not_Tracts_Block_Groups';
   const outputDir = 'CensusDL/group/';
-  const seq_num = '002';
-  // todo ? 1 year files?
 
   const states_data_ready = Object.keys(states).map((state, index) => {
-    const fileName = `${YEAR}5${state}0${seq_num}000.zip`;
+    const fileName = `${YEAR}5${state}0${SEQ}000.zip`;
     const url = `https://www2.census.gov/programs-surveys/acs/summary_file/${YEAR}/data/5_year_seq_by_state/${states[state]}/${fileType}/${fileName}`;
 
     return new Promise((resolve, reject) => {
