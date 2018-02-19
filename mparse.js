@@ -96,11 +96,11 @@ function readDirectory() {
       if (err) {
         reject(err);
       }
-      const filtered = files.filter(file => {
-        return file.slice(0, 1) === 'e';
-      });
+      // const filtered = files.filter(file => {
+      //   return file.slice(0, 1) === 'e';
+      // });
 
-      resolve(filtered);
+      resolve(files);
     });
   });
 }
@@ -121,6 +121,7 @@ function parseData(schemas, keyed_lookup, cluster_lookup, files) {
           header: false,
           skipEmptyLines: true,
           complete: function() {
+            console.log(`parse ${file}`);
             resolve('done');
           },
           step: function(results) {
@@ -220,7 +221,7 @@ function parseData(schemas, keyed_lookup, cluster_lookup, files) {
 
     });
 
-  }, { concurrency: 1 });
+  }, { concurrency: 10 });
 
   return Promise.all(parsed_files);
 
@@ -311,10 +312,10 @@ function createSchemaFiles() {
 }
 
 function downloadDataFromACS() {
-  const isTractBGFile = true;
+  const isTractBGFile = false;
   const fileType = isTractBGFile ? 'Tracts_Block_Groups_Only' : 'All_Geographies_Not_Tracts_Block_Groups';
   const outputDir = 'CensusDL/group/';
-  const seq_num = '059';
+  const seq_num = '002';
   // todo ? 1 year files?
 
   const states_data_ready = Object.keys(states).map((state, index) => {
