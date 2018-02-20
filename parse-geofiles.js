@@ -1,7 +1,5 @@
 // prep work before getting all census data
 
-// TODO create schema files function should go here since it's setup
-
 const Papa = require('papaparse');
 const states = require('./modules/states');
 const geography_file_headers = require('./modules/settings.js').geography_file_headers;
@@ -48,17 +46,51 @@ const all_states_parsed = Object.keys(states).map(state => {
 
 Promise.all(all_states_parsed).then(datas => {
   const parsed_dataset = JSON.stringify(Object.assign({}, ...datas));
-  return putObject(`g${YEAR}.json`, parsed_dataset);
+  return putObject(`g${dataset[YEAR].text}.json`, parsed_dataset);
 }).then(() => {
   console.log('done');
 });
 
+/*****************/
+
+
+// combine cluster data into a single file;
+
+const promises = ['bg', 'tract', 'place', 'county', 'state'].map(geo => {
+  return rp({
+    method: 'get',
+    uri: `https://s3-us-west-2.amazonaws.com/${dataset[YEAR].cluster_bucket}/clusters_${dataset[YEAR].year}_${geo}.json`,
+    headers: {
+      'Accept-Encoding': 'gzip',
+    },
+    gzip: true,
+    json: true,
+    fullResponse: false
+  });
+});
+
+Promise.all(promises)
+  .then(data => {
+
+    const arr = data.map(d => {
+      return d[dataset[YEAR].clusters];
+    });
+
+    // parse into one master object with all geoids
+    const combined_clusters = Object.assign({}, ...arr);
+
+    putObject(`c${YEAR}.json`, JSON.stringify(combined_clusters))
+      .then(() => {
+        console.log('clusters written to metadata bucket');
+      });
+
+  });
 
 
 /*****************/
 
 function putObject(key, value) {
-  const myBucket = `s3db-acs-${dataset[YEAR].text}`;
+  const myBucket = `s3db-acs-metadata-${dataset[YEAR].text}`;
 
   return new Promise((resolve, reject) => {
     const params = { Bucket: myBucket, Key: key, Body: value, ContentType: 'application/json' };

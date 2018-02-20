@@ -1,9 +1,7 @@
 # s3-db
-Testing S3 as a read-only database with potentially hundreds of simultaneous queries.
+Testing S3 as a cost-efficient key-value database.
 
-Requires Node 8 or higher (async await)
-
-Use a big machine!  (try something with 8 cores and 32GB RAM)
+Uses nodeJS cluster module for multiple threads.  Use the biggest machine possible for fastest load times.
 
 
 ```

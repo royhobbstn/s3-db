@@ -1,4 +1,3 @@
-const argv = require('yargs').argv;
 const states = require('./modules/states');
 const Promise = require('bluebird');
 const request = require('requestretry');
@@ -13,17 +12,19 @@ const Papa = require('papaparse');
 const dataset = require('./modules/settings.js').dataset;
 const zlib = require('zlib');
 
-if (argv._.length === 0) {
+if (!process.argv[4]) {
   console.log('fatal error.  Run like: node mparse.js year seq a');
   console.log('where year: 2014, 2015, 2016');
   console.log('where seq: 001, 002, etc');
   console.log('where a: trbg, allgeo  (tracts and block groups or all other geographies');
+  console.log('example: node mparse.js 2015 003 allgeo');
   process.exit();
 }
 
-const YEAR = argv._[0];
-const SEQ = argv._[1];
-const GRP = argv._[2];
+const YEAR = process.argv[2];
+const SEQ = process.argv[3];
+const GRP = process.argv[4];
+
 
 const data_cache = {};
 
@@ -59,38 +60,48 @@ readyWorkspace()
 /****************/
 
 function combineData() {
+
   let put_object_array = [];
 
   Object.keys(data_cache).forEach(attr => {
     Object.keys(data_cache[attr]).forEach(sumlev => {
       Object.keys(data_cache[attr][sumlev]).forEach(cluster => {
-
-        const key = `${attr}/${sumlev}/${cluster}.json`;
-        const data = JSON.stringify(data_cache[attr][sumlev][cluster]);
-
-        const promise = new Promise((resolve, reject) => {
-
-          zlib.gzip(data, function(error, result) {
-            if (error) { return reject(error); }
-
-            // save to S3
-            const params = { Bucket: `s3db-acs-${dataset[YEAR].text}`, Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
-            s3.putObject(params, function(err, data) {
-              if (err) { return reject(err); }
-              return resolve(key);
-            });
-
-          });
-
-        });
-
-        put_object_array.push(promise);
-
+        put_object_array.push(`${attr}/${sumlev}/${cluster}`);
       });
     });
   });
 
-  return Promise.all(put_object_array);
+
+  const mapped_promises = Promise.map(put_object_array, (obj) => {
+
+    const split = obj.split('/');
+    const attr = split[0];
+    const sumlev = split[1];
+    const cluster = split[2];
+
+    const key = `${attr}/${sumlev}/${cluster}.json`;
+    const data = JSON.stringify(data_cache[attr][sumlev][cluster]);
+
+    return new Promise((resolve, reject) => {
+
+      zlib.gzip(data, function(error, result) {
+        if (error) { return reject(error); }
+
+        // save to S3
+        const params = { Bucket: `s3db-acs-${dataset[YEAR].text}`, Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
+        s3.putObject(params, function(err, data) {
+          if (err) { return reject(err); }
+          return resolve(key);
+        });
+
+      });
+
+    });
+  }, { concurrency: 1 });
+
+
+  return Promise.all(mapped_promises);
+
 }
 
 
@@ -234,40 +245,22 @@ function parseData(schemas, keyed_lookup, cluster_lookup, files) {
 function getClusterInfo() {
 
   // Load cluster files for each geographic level;
-
-  const promises = ['bg', 'tract', 'place', 'county', 'state'].map(geo => {
-    return rp({
-      method: 'get',
-      uri: `https://s3-us-west-2.amazonaws.com/${dataset[YEAR].cluster_bucket}/clusters_${dataset[YEAR].year}_${geo}.json`,
-      headers: {
-        'Accept-Encoding': 'gzip',
-      },
-      gzip: true,
-      json: true,
-      fullResponse: false
-    });
+  return rp({
+    method: 'get',
+    uri: `https://s3-us-west-2.amazonaws.com/s3db-acs-metadata-${dataset[YEAR].text}/c${YEAR}.json`,
+    json: true,
+    fullResponse: false
   });
-
-  return Promise.all(promises)
-    .then(data => {
-
-      const arr = data.map(d => {
-        return d[dataset[YEAR].clusters];
-      });
-
-      // parse into one master object with all geoids
-      return Object.assign({}, ...arr);
-
-    });
 
 }
 
 
 function getGeoKey() {
 
+  // Load geoid lookup for all geographies in the dataset
   return rp({
     method: 'get',
-    uri: `https://s3-us-west-2.amazonaws.com/s3db-acs-${dataset[YEAR].text}/g${YEAR}.json`,
+    uri: `https://s3-us-west-2.amazonaws.com/s3db-acs-metadata-${dataset[YEAR].text}/g${dataset[YEAR].text}.json`,
     json: true,
     fullResponse: false
   });
