@@ -6,7 +6,7 @@ exports.dataset = {
     text: '1014',
     seq_files: '121',
     clusters: 'c2000',
-    cluster_bucket: 'small-tiles'
+    cluster_bucket: 'cluster-tiles'
   },
 
   '2015': {
@@ -14,7 +14,7 @@ exports.dataset = {
     text: '1115',
     seq_files: '122',
     clusters: 'c2000',
-    cluster_bucket: 'small-tiles'
+    cluster_bucket: 'cluster-tiles'
   },
 
   '2016': {
@@ -22,7 +22,7 @@ exports.dataset = {
     text: '1216',
     seq_files: '122',
     clusters: 'c2000',
-    cluster_bucket: 'small-tiles'
+    cluster_bucket: 'cluster-tiles'
   }
 };
 
