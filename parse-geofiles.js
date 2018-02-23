@@ -39,6 +39,8 @@ const all_states_parsed = Object.keys(states).map(state => {
         }
       });
     });
+  }).catch(err => {
+    console.log(err);
   });
 
 });
@@ -49,6 +51,9 @@ Promise.all(all_states_parsed).then(datas => {
   return putObject(`g${dataset[YEAR].text}.json`, parsed_dataset);
 }).then(() => {
   console.log('done');
+}).catch(error => {
+  console.log('failed creating geofile.');
+  console.log(error);
 });
 
 /*****************/
