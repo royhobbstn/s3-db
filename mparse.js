@@ -63,8 +63,12 @@ function combineData() {
 
   let put_object_array = [];
 
+  console.log('creating directories');
+
   Object.keys(data_cache).forEach(attr => {
+    fs.mkdirSync(`./CensusDL/output/${attr}`);
     Object.keys(data_cache[attr]).forEach(sumlev => {
+      fs.mkdirSync(`./CensusDL/output/${attr}/${sumlev}`);
       Object.keys(data_cache[attr][sumlev]).forEach(cluster => {
         put_object_array.push(`${attr}/${sumlev}/${cluster}`);
       });
@@ -91,12 +95,27 @@ function combineData() {
         if (error) { return reject(error); }
 
         // save to S3
-        const params = { Bucket: `s3db-acs-${dataset[YEAR].text}`, Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
-        s3.putObject(params, function(err, data) {
-          if (err) { return reject(err); }
+        // const params = { Bucket: `s3db-acs-${dataset[YEAR].text}`, Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
+        // s3.putObject(params, function(err, data) {
+        //   if (err) { return reject(err); }
+        //   running_count++;
+        //   if (running_count % 10 === 0) {
+        //     console.log(`processing: ${((running_count / write_files_total)*100).toFixed(2)} %`);
+        //   }
+        //   return resolve(key);
+        // });
+
+        // save to folder
+        fs.writeFile(`./CensusDL/output/${key}`, data, 'base64', function(err) {
+
           running_count++;
           if (running_count % 10 === 0) {
             console.log(`processing: ${((running_count / write_files_total)*100).toFixed(2)} %`);
+          }
+
+          if (err) {
+            console.log(err);
+            return reject(err);
           }
           return resolve(key);
         });
@@ -104,7 +123,7 @@ function combineData() {
       });
 
     });
-  }, { concurrency: 1 });
+  }, { concurrency: 20 });
 
   return Promise.all(mapped_promises);
 }

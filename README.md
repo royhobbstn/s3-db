@@ -1,8 +1,11 @@
 # s3-db
 Testing S3 as a cost-efficient key-value database.
 
-Uses nodeJS cluster module for multiple threads.  Use the biggest machine possible for fastest load times.
+## Prerequisite
 
+Run ```node parse-geofiles.js $year``` for your target year (2014, 2015, 2016)
+
+## Main
 
 ```
 sudo yum install -y git
@@ -11,7 +14,3 @@ cd s3-db
 screen
 bash run-data.sh 2015
 ```
-
-For EMFILE errors for having too many files open at once:
-
-https://stackoverflow.com/a/11345256/8896489
