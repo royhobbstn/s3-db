@@ -9,11 +9,11 @@ const rimraf = require('rimraf');
 const AWS = require('aws-sdk');
 const s3 = new AWS.S3();
 const Papa = require('papaparse');
-const dataset = require('./modules/settings.js').dataset;
+const { dataset } = require('./modules/settings.js');
 const zlib = require('zlib');
 
 if (!process.argv[4]) {
-  console.log('fatal error.  Run like: node mparse.js year seq a');
+  console.log('fatal error.  Run like: node --max_old_space_size=14192 mparse.js year seq a');
   console.log('where year: 2014, 2015, 2016');
   console.log('where seq: 001, 002, etc');
   console.log('where a: trbg, allgeo  (tracts and block groups or all other geographies');
@@ -71,6 +71,9 @@ function combineData() {
     });
   });
 
+  const write_files_total = put_object_array.length;
+  console.log(`attempting to write ${write_files_total} files.`);
+  let running_count = 0;
 
   const mapped_promises = Promise.map(put_object_array, (obj) => {
 
@@ -91,6 +94,10 @@ function combineData() {
         const params = { Bucket: `s3db-acs-${dataset[YEAR].text}`, Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
         s3.putObject(params, function(err, data) {
           if (err) { return reject(err); }
+          running_count++;
+          if (running_count % 10 === 0) {
+            console.log(`processing: ${((running_count / write_files_total)*100).toFixed(2)} %`);
+          }
           return resolve(key);
         });
 
@@ -99,9 +106,7 @@ function combineData() {
     });
   }, { concurrency: 1 });
 
-
   return Promise.all(mapped_promises);
-
 }
 
 

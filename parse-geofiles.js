@@ -2,10 +2,9 @@
 
 const Papa = require('papaparse');
 const states = require('./modules/states');
-const geography_file_headers = require('./modules/settings.js').geography_file_headers;
+const { dataset, geography_file_headers } = require('./modules/settings.js');
 const argv = require('yargs').argv;
 const rp = require('request-promise');
-const dataset = require('./modules/settings.js').dataset;
 const AWS = require('aws-sdk');
 const s3 = new AWS.S3();
 
