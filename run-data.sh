@@ -50,7 +50,7 @@ for i in $(seq -f "%03g" 1 "$num_seq")
 do
   echo "STARTING $year $i trbg"
   node --max_old_space_size=14192 mparse.js $year $i trbg
-  aws s3 sync ./CensusDL/output s3://"$bucket" --content-encoding gzip
+  aws s3 sync ./CensusDL/output s3://"$bucket" --content-encoding gzip --content-type application/json
 done
 
 # loop for all other geo
@@ -58,7 +58,7 @@ for i in $(seq -f "%03g" 1 "$num_seq")
 do
   echo "STARTING $year $i allgeo"
   node --max_old_space_size=14192 mparse.js $year $i allgeo
-  aws s3 sync ./CensusDL/output s3://"$bucket" --content-encoding gzip
+  aws s3 sync ./CensusDL/output s3://"$bucket" --content-encoding gzip --content-type application/json
 done
 
 echo "finished"

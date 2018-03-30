@@ -94,19 +94,8 @@ function combineData() {
       zlib.gzip(data, function(error, result) {
         if (error) { return reject(error); }
 
-        // save to S3
-        // const params = { Bucket: `s3db-acs-${dataset[YEAR].text}`, Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
-        // s3.putObject(params, function(err, data) {
-        //   if (err) { return reject(err); }
-        //   running_count++;
-        //   if (running_count % 10 === 0) {
-        //     console.log(`processing: ${((running_count / write_files_total)*100).toFixed(2)} %`);
-        //   }
-        //   return resolve(key);
-        // });
-
         // save to folder
-        fs.writeFile(`./CensusDL/output/${key}`, data, 'base64', function(err) {
+        fs.writeFile(`./CensusDL/output/${key}`, result, 'utf8', function(err) {
 
           running_count++;
           if (running_count % 10 === 0) {
