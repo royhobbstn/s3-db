@@ -33,16 +33,15 @@ readyWorkspace()
     return downloadDataFromACS();
   })
   .then(() => {
-    console.log('downloading schemas, geoids, and cluster information');
-    return Promise.all([createSchemaFiles(), getGeoKey(), getClusterInfo(), readDirectory()]);
+    console.log('downloading schemas and geoid information');
+    return Promise.all([createSchemaFiles(), getGeoKey(), readDirectory()]);
   })
   .then((setup_information) => {
     const schemas = setup_information[0];
     const keyed_lookup = setup_information[1];
-    const cluster_lookup = setup_information[2];
-    const files = setup_information[3];
+    const files = setup_information[2];
     console.log('parsing ACS data');
-    return parseData(schemas, keyed_lookup, cluster_lookup, files);
+    return parseData(schemas, keyed_lookup, files);
   })
   .then(d => {
     console.log('combining ACS data & writing to S3');
@@ -63,20 +62,14 @@ function combineData() {
 
   let put_object_array = [];
 
-  console.log('creating directories');
-
   Object.keys(data_cache).forEach(attr => {
-    fs.mkdirSync(`./CensusDL/output/${attr}`);
     Object.keys(data_cache[attr]).forEach(sumlev => {
-      fs.mkdirSync(`./CensusDL/output/${attr}/${sumlev}`);
-      Object.keys(data_cache[attr][sumlev]).forEach(cluster => {
-        put_object_array.push(`${attr}/${sumlev}/${cluster}`);
-      });
+      put_object_array.push(`${attr}/${sumlev}`);
     });
   });
 
   const write_files_total = put_object_array.length;
-  console.log(`attempting to write ${write_files_total} files.`);
+  console.log(`attempting to upload ${write_files_total} files.`);
   let running_count = 0;
 
   const mapped_promises = Promise.map(put_object_array, (obj) => {
@@ -84,18 +77,17 @@ function combineData() {
     const split = obj.split('/');
     const attr = split[0];
     const sumlev = split[1];
-    const cluster = split[2];
 
-    const key = `${attr}/${sumlev}/${cluster}.json`;
-    const data = JSON.stringify(data_cache[attr][sumlev][cluster]);
+    const key = `${attr}/${sumlev}.json`;
+    const data = JSON.stringify(data_cache[attr][sumlev]);
 
     return new Promise((resolve, reject) => {
 
       zlib.gzip(data, function(error, result) {
         if (error) { return reject(error); }
 
-        // save to folder
-        fs.writeFile(`./CensusDL/output/${key}`, result, 'utf8', function(err) {
+        const params = { Bucket: `s3db-acs-${dataset[YEAR].text}`, Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
+        s3.putObject(params, function(err, data) {
 
           running_count++;
           if (running_count % 10 === 0) {
@@ -112,7 +104,7 @@ function combineData() {
       });
 
     });
-  }, { concurrency: 20 });
+  }, { concurrency: 10 });
 
   return Promise.all(mapped_promises);
 }
@@ -131,7 +123,7 @@ function readDirectory() {
   });
 }
 
-function parseData(schemas, keyed_lookup, cluster_lookup, files) {
+function parseData(schemas, keyed_lookup, files) {
 
   const parsed_files = Promise.map(files, (file) => {
     const e_or_m = file.slice(0, 1);
@@ -203,14 +195,6 @@ function parseData(schemas, keyed_lookup, cluster_lookup, files) {
               process.exit();
             }
 
-            const cluster = cluster_lookup[parsed_geoid];
-
-            // some geographies are in the census, but not in the geography file.
-            // we will ignore these
-            if (cluster === undefined) {
-              return;
-            }
-
             results.data[0].forEach((d, i) => {
 
               if (i <= 5) {
@@ -228,14 +212,10 @@ function parseData(schemas, keyed_lookup, cluster_lookup, files) {
                 data_cache[attr][sumlev] = {};
               }
 
-              if (!data_cache[attr][sumlev][cluster]) {
-                data_cache[attr][sumlev][cluster] = {};
-              }
-
               const num_key = (d === '' || d === '.') ? null : Number(d);
 
               // this is how the data will be modeled in S3
-              data_cache[attr][sumlev][cluster][parsed_geoid] = num_key;
+              data_cache[attr][sumlev][parsed_geoid] = num_key;
 
             });
 
@@ -253,19 +233,6 @@ function parseData(schemas, keyed_lookup, cluster_lookup, files) {
 
 }
 
-
-
-function getClusterInfo() {
-
-  // Load cluster files for each geographic level;
-  return rp({
-    method: 'get',
-    uri: `https://s3-us-west-2.amazonaws.com/s3db-acs-metadata-${dataset[YEAR].text}/c${YEAR}.json`,
-    json: true,
-    fullResponse: false
-  });
-
-}
 
 
 function getGeoKey() {
