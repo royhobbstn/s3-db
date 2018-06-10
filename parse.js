@@ -4,7 +4,6 @@ const request = require('requestretry');
 const rp = require('request-promise');
 const fs = require('fs');
 const unzip = require('unzipper');
-const csv = require('csvtojson');
 const rimraf = require('rimraf');
 const AWS = require('aws-sdk');
 const s3 = new AWS.S3();

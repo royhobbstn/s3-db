@@ -1,7 +1,9 @@
 # s3-db
 Testing S3 as a cost-efficient key-value database.
 
-Use on Amazon Linux.
+Data processed w/ (mostly) serverless pipeline.
+
+For use on Amazon Linux.
 
 ## Prerequisite
 
@@ -27,5 +29,5 @@ for your target year (2014, 2015, 2016)
 
 ```
 screen
-bash run-data.sh 2015
+node run-data.sh 1014
 ```
