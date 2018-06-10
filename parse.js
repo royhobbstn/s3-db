@@ -15,11 +15,12 @@ const zlib = require('zlib');
 console.log('starting...');
 console.time("runTime");
 
-if (!process.argv[4]) {
-  console.log('fatal error.  Run like: node --max_old_space_size=14192 mparse.js year seq a');
+if (!process.argv[5]) {
+  console.log('fatal error.  Run like: node --max_old_space_size=14192 mparse.js year seq a me');
   console.log('where year: 2014, 2015, 2016');
   console.log('where seq: 001, 002, etc');
   console.log('where a: trbg, allgeo  (tracts and block groups or all other geographies');
+  console.log('where me: m, e (margin of error or estimate)');
   console.log('example: node mparse.js 2015 003 allgeo');
   process.exit();
 }
@@ -27,12 +28,17 @@ if (!process.argv[4]) {
 const YEAR = process.argv[2];
 const SEQ = process.argv[3];
 const GRP = process.argv[4];
+const M_or_E = process.argv[5];
 
 
 
 readyWorkspace()
   .then(() => {
     return downloadDataFromACS();
+  })
+  .then(() => {
+    // delete moe or est files
+    return deleteUnused();
   })
   .then(() => {
     console.log('downloading schemas and geoid information');
@@ -114,6 +120,43 @@ function downloadDataFromACS() {
   });
 
   return Promise.all(states_data_ready);
+}
+
+
+function deleteUnused() {
+  //
+  return new Promise((resolve, reject) => {
+    // for file in directory
+    fs.readdir(`./CensusDL/stage`, (err, files) => {
+      if (err) {
+        return reject(err);
+      }
+
+      const delete_these_files = files.filter(file => {
+        return file.slice(0, 1) !== M_or_E;
+      });
+
+      const deleted_files = delete_these_files.map(file => {
+
+        return new Promise((resolve, reject) => {
+          fs.unlink(`./CensusDL/stage/${file}`, function(err) {
+            if (err) {
+              // won't reject on error
+              console.log(err);
+              return reject(false);
+            }
+            resolve(true);
+          });
+        });
+
+      });
+
+      Promise.all(deleted_files).then(() => {
+        return resolve(true);
+      });
+
+    });
+  });
 }
 
 
@@ -394,28 +437,4 @@ function combineData({ uniques, files }) {
   }, { concurrency: 10 });
 
   return Promise.all(files_saved);
-}
-
-
-/*******************/
-
-
-
-// https://github.com/uxitten/polyfill/blob/master/string.polyfill.js
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/padStart
-if (!String.prototype.padStart) {
-  String.prototype.padStart = function padStart(targetLength, padString) {
-    targetLength = targetLength >> 0; //truncate if number or convert non-number to 0;
-    padString = String((typeof padString !== 'undefined' ? padString : ' '));
-    if (this.length > targetLength) {
-      return String(this);
-    }
-    else {
-      targetLength = targetLength - this.length;
-      if (targetLength > padString.length) {
-        padString += padString.repeat(targetLength / padString.length); //append to original to ensure we are longer than needed
-      }
-      return padString.slice(0, targetLength) + String(this);
-    }
-  };
 }
