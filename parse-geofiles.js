@@ -58,40 +58,6 @@ Promise.all(all_states_parsed).then(datas => {
 /*****************/
 
 
-// combine cluster data into a single file;
-// const promises = ['bg', 'tract', 'place', 'county', 'state'].map(geo => {
-//   return rp({
-//     method: 'get',
-//     uri: `https://s3-us-west-2.amazonaws.com/${dataset[YEAR].cluster_bucket}/clusters_${dataset[YEAR].year}_${geo}.json`,
-//     headers: {
-//       'Accept-Encoding': 'gzip',
-//     },
-//     gzip: true,
-//     json: true,
-//     fullResponse: false
-//   });
-// });
-
-// Promise.all(promises)
-//   .then(data => {
-
-//     const arr = data.map(d => {
-//       return d[dataset[YEAR].clusters];
-//     });
-
-//     // parse into one master object with all geoids
-//     const combined_clusters = Object.assign({}, ...arr);
-
-//     putObject(`c${YEAR}.json`, JSON.stringify(combined_clusters))
-//       .then(() => {
-//         console.log('clusters written to metadata bucket');
-//       });
-
-//   });
-
-
-/*****************/
-
 function putObject(key, value) {
   const myBucket = `s3db-acs-metadata-${dataset[YEAR].text}`;
 

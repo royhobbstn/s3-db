@@ -37,6 +37,7 @@
     "unzip": "^0.1.11",
     "unzip-stream": "^0.3.0",
     "unzip2": "^0.2.5",
+    "unzipper": "^0.8.14",
     "yargs": "^10.0.3"
   },
   "devDependencies": {

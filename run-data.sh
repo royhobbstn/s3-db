@@ -49,14 +49,14 @@ npm install
 for i in $(seq -f "%03g" 1 "$num_seq")
 do
   echo "STARTING $year $i trbg"
-  node --max_old_space_size=14192 mparse.js $year $i trbg
+  node --max_old_space_size=14192 parse.js $year $i trbg
 done
 
 # loop for all other geo
 for i in $(seq -f "%03g" 1 "$num_seq")
 do
   echo "STARTING $year $i allgeo"
-  node --max_old_space_size=14192 mparse.js $year $i allgeo
+  node --max_old_space_size=14192 parse.js $year $i allgeo
 done
 
 echo "finished"
