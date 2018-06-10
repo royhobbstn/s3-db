@@ -9,7 +9,7 @@ const AWS = require('aws-sdk');
 const s3 = new AWS.S3();
 
 if (argv._.length === 0) {
-  console.log('fatal error.  Run like: node parse-geofiles.js 2015');
+  console.log('fatal error.  Run like: node parse-acs-geofiles.js 2015');
   process.exit();
 }
 

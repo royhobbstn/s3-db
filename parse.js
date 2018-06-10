@@ -118,47 +118,20 @@ function downloadDataFromACS() {
 
 
 function createSchemaFiles() {
-  return new Promise((resolve, reject) => {
 
-    const url = `https://www2.census.gov/programs-surveys/acs/summary_file/${YEAR}/documentation/user_tools/ACS_5yr_Seq_Table_Number_Lookup.txt`;
-    request(url, function(err, resp, body) {
-      if (err) { return reject(err); }
-
-      csv({ noheader: false })
-        .fromString(body)
-        .on('end_parsed', data => {
-
-          const fields = {};
-          // filter out line number if non-integer value
-          data.forEach(d => {
-            const line_number = Number(d['Line Number']);
-            if (Number.isInteger(line_number) && line_number > 0) {
-              const field_name = d['Table ID'] + String(d['Line Number']).padStart(3, "0");
-              const seq_num = d['Sequence Number'].slice(1);
-              if (fields[seq_num]) {
-                fields[seq_num].push(field_name);
-              }
-              else {
-                fields[seq_num] = ["FILEID", "FILETYPE", "STUSAB", "CHARITER", "SEQUENCE", "LOGRECNO", field_name];
-              }
-            }
-          });
-
-          resolve(fields);
-        })
-        .on('done', () => {
-          //parsing finished
-          console.log('finished parsing schema file');
-        });
-    });
+  // Load schema for the dataset
+  return rp({
+    method: 'get',
+    uri: `https://s3-us-west-2.amazonaws.com/s3db-acs-metadata-${dataset[YEAR].text}/s${dataset[YEAR].text}.json`,
+    json: true,
+    fullResponse: false
   });
+
 }
 
 function getGeoKey() {
 
   // Load geoid lookup for all geographies in the dataset
-  // todo.... this can be broken down by geography level... or at least tr/bg vs all other
-  // though it is only 18MB
   return rp({
     method: 'get',
     uri: `https://s3-us-west-2.amazonaws.com/s3db-acs-metadata-${dataset[YEAR].text}/g${dataset[YEAR].text}.json`,
