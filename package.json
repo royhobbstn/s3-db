@@ -4,7 +4,7 @@
   "description": "Testing S3 as a read-only database with potentially thousands of simultaneous queries.",
   "main": "app.js",
   "scripts": {
-    "start": "nodemon app.js",
+    "start": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -21,15 +21,18 @@
     "aws-sdk": "^2.149.0",
     "bluebird": "^3.5.1",
     "csvtojson": "^1.1.9",
+    "express": "^4.16.3",
     "papaparse": "^4.3.6",
     "request": "^2.83.0",
     "request-promise": "^4.2.2",
     "requestretry": "^1.12.2",
     "rimraf": "^2.6.2",
+    "serverless-http": "^1.5.5",
     "unzipper": "^0.8.14",
     "yargs": "^10.0.3"
   },
   "devDependencies": {
-    "nodemon": "^1.12.1"
+    "serverless": "^1.27.3",
+    "serverless-offline": "^3.25.4"
   }
 }

@@ -1,0 +1,31 @@
+# serverless.yml
+
+service: s3-db
+
+provider:
+  name: aws
+  iamRoleStatements:
+      - Effect: "Allow"
+        Action:
+          - "s3:*"
+        Resource:
+          - { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "ServerlessDeploymentBucket" } ]]}
+          - "arn:aws:s3:::s3db-acs-1216/*"
+          - "arn:aws:s3:::s3db-acs-1115/*"
+          - "arn:aws:s3:::s3db-acs-1014/*"
+  runtime: nodejs8.10
+  stage: dev
+  region: us-west-2
+  timeout: 180
+
+functions:
+  app:
+    handler: app.handler
+    events:
+      - http:
+          path: process
+          method: get
+          cors: true
+          
+plugins:
+  - serverless-offline

@@ -3,13 +3,6 @@ Testing S3 as a cost-efficient key-value database.
 
 Data processed w/ (mostly) serverless pipeline.
 
-For use on Amazon Linux.
-
-## Prerequisite
-
-```
-sudo yum install -y git
-```
 
 ## Main
 
@@ -28,6 +21,14 @@ node parse-acs-schemas.js $year
 for your target year (2014, 2015, 2016)
 
 ```
-screen
-node run-data.sh 1014
+serverless deploy
+```
+
+Use the url above to create ```secret-url.js```
+
+
+Then:
+
+```
+node run-data.sh $year
 ```
