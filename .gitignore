@@ -6,3 +6,6 @@ CensusDL
 secret-url.js
 
 .serverless
+
+jspm_packages
+

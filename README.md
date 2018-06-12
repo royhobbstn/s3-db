@@ -24,9 +24,6 @@ for your target year (2014, 2015, 2016)
 serverless deploy
 ```
 
-Use the url above to create ```secret-url.js```
-
-
 Then:
 
 ```
