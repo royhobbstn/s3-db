@@ -6,90 +6,94 @@ const AWS = require('aws-sdk');
 const s3 = new AWS.S3();
 const { dataset } = require('./modules/settings.js');
 const zlib = require('zlib');
+const fileTypes = ['Tracts_Block_Groups_Only', 'All_Geographies_Not_Tracts_Block_Groups'];
+
+const YEAR = '2014';
+const SEQ = '002';
+
+const urls = Object.keys(states).reduce((acc, state) => {
+
+  const fileName = `${YEAR}5${state}0${SEQ}000.zip`;
+  fileTypes.forEach(fileType => {
+    acc.push(`https://www2.census.gov/programs-surveys/acs/summary_file/${YEAR}/data/5_year_seq_by_state/${states[state]}/${fileType}/${fileName}`);
+  });
+
+  return acc;
+
+}, []);
 
 
-unzipper.Open.url(request, 'https://www2.census.gov/programs-surveys/acs/summary_file/2014/data/1_year_seq_by_state/Alaska/20141ak0001000.zip')
-  .then(function(d) {
+const parsed_files = Promise.map(urls, (url) => {
 
-    const filenames = [];
-    const text_promises = [];
+  return new Promise((map_resolve, map_reject) => {
+    /**/
+    unzipper.Open.url(request, url)
+      .then(function(d) {
 
-    d.files.forEach(function(file) {
-      console.log(file.path);
-      filenames.push(file.path);
-      text_promises.push(file.buffer());
-    });
+        const filenames = [];
+        const text_promises = [];
 
-    return Promise.all(text_promises)
-      .then(d => {
-        return d.map((text, index) => {
-          console.log(typeof d);
-          return {
-            filename: filenames[index],
-            text: text.toString()
-          };
+        d.files.forEach(function(file) {
+          filenames.push(file.path.replace('.txt', '.csv'));
+          text_promises.push(file.buffer());
         });
+
+        return Promise.all(text_promises)
+          .then(d => {
+            return d.map((text, index) => {
+              return {
+                filename: filenames[index],
+                text: text.toString()
+              };
+            });
+          });
+
+      })
+      .then(function(data) {
+
+        const written = data.map(d => {
+
+          return new Promise((resolve, reject) => {
+
+            zlib.gzip(d.text, function(error, result) {
+
+              if (error) { return reject(error); }
+              const key = d.filename;
+              const params = { Bucket: `s3db-acs-raw-${dataset[YEAR].text}`, Key: key, Body: result, ContentType: 'text/csv', ContentEncoding: 'gzip' };
+
+              s3.putObject(params, function(err, data) {
+                if (err) {
+                  console.log(err);
+                  return reject(err);
+                }
+                return resolve(key);
+              });
+
+            });
+          });
+
+        });
+        return Promise.all(written);
+      })
+      .then(data => {
+        map_resolve(data);
+      })
+      .catch(err => {
+        map_reject(err);
       });
 
 
-  })
-  .then(function(d) {
+    /**/
+  });
+
+}, { concurrency: 10 });
+
+Promise.all(parsed_files)
+  .then(d => {
     console.log(d);
+    console.log('done!');
+  })
+  .catch(error => {
+    console.log('uhoh');
+    console.log(error);
   });
-
-
-/*
-
-zlib.gzip(JSON.stringify(reduced), function(error, result) {
-  if (error) { return reject(error); }
-
-  // console.log(`s3db-acs-${dataset[YEAR].text}`);
-  const key = file_list[0].split('|')[0].replace('-', '/');
-  // console.log(key);
-
-  const params = { Bucket: `s3db-acs-raw-${dataset[YEAR].text}`, Key: `${key}.csv`, Body: result, ContentType: 'text/csv', ContentEncoding: 'gzip' };
-  s3.putObject(params, function(err, data) {
-
-    if (err) {
-      console.log(err);
-      return reject(err);
-    }
-    return resolve(key);
-  });
-
-});
-
-
-function downloadDataFromACS() {
-  const fileType = GRP === 'trbg' ? 'Tracts_Block_Groups_Only' : 'All_Geographies_Not_Tracts_Block_Groups';
-
-  const states_data_ready = Object.keys(states).map((state, index) => {
-    const fileName = `${YEAR}5${state}0${SEQ}000.zip`;
-    const url = `https://www2.census.gov/programs-surveys/acs/summary_file/${YEAR}/data/5_year_seq_by_state/${states[state]}/${fileType}/${fileName}`;
-
-    console.log(url);
-
-    return new Promise((resolve, reject) => {
-      request({ url, encoding: null }).pipe(unzipper.Extract({ path: `/tmp/CensusDL/stage` })
-        .on('close', function() {
-          console.log(`${fileName} unzipped!`);
-        })
-        .on('error', function(err) {
-          console.log('download problem');
-          console.log(err);
-          reject(err);
-        })
-        .on('finish', function() {
-          resolve('done unzip');
-        })
-      );
-
-
-    });
-  });
-
-  return Promise.all(states_data_ready);
-}
-
-
-*/
