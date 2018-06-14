@@ -14,7 +14,7 @@ const Papa = require('papaparse');
 const { dataset } = require('./modules/settings.js');
 const zlib = require('zlib');
 
-module.exports.run = (event, context, callback) => {
+module.exports.parse = (event, context, callback) => {
 
 
   console.log('starting...');
