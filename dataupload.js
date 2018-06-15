@@ -15,10 +15,11 @@ module.exports.upload = (event, context, callback) => {
   console.log('starting...');
   console.time("runTime");
 
-  const split = event.split('_');
+  console.log(event);
 
-  const YEAR = split[0];
-  const SEQ = split[1];
+  const YEAR = event.year;
+  const SEQ = event.seq;
+  const TYPE = event.type;
 
   const urls = Object.keys(states).reduce((acc, state) => {
 
@@ -43,8 +44,10 @@ module.exports.upload = (event, context, callback) => {
           const text_promises = [];
 
           d.files.forEach(function(file) {
-            filenames.push(file.path.replace('.txt', '.csv'));
-            text_promises.push(file.buffer());
+            if (file.path.slice(0, 1) === TYPE.toLowerCase()) {
+              filenames.push(file.path.replace('.txt', '.csv'));
+              text_promises.push(file.buffer());
+            }
           });
 
           return Promise.all(text_promises)
