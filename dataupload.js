@@ -12,14 +12,13 @@ const fileTypes = ['Tracts_Block_Groups_Only', 'All_Geographies_Not_Tracts_Block
 
 module.exports.upload = (event, context, callback) => {
 
-  console.log('starting...');
-  console.time("runTime");
-
-  console.log(event);
 
   const YEAR = event.year;
   const SEQ = event.seq;
   const TYPE = event.type;
+
+  console.log(`starting...  ${YEAR} ${SEQ} ${TYPE}`);
+  console.time("runTime");
 
   const urls = Object.keys(states).reduce((acc, state) => {
 

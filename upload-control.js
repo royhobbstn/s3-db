@@ -37,7 +37,7 @@ const invoked = Promise.map(lambda_invocations, (instance) => {
 
     const params = {
       FunctionName: "s3-db-dev-dataupload",
-      InvocationType: "RequestResponse",
+      InvocationType: "Event",
       LogType: "None",
       Payload: JSON.stringify({
         'year': YEAR,
@@ -58,7 +58,7 @@ const invoked = Promise.map(lambda_invocations, (instance) => {
 
   });
 
-}, { concurrency: 25 });
+}, { concurrency: 6 });
 
 
 Promise.all(invoked).then(() => {
@@ -67,6 +67,7 @@ Promise.all(invoked).then(() => {
   .catch(err => {
     console.log(err);
     console.log('something bad happened');
+    process.exit();
   });
 
 
