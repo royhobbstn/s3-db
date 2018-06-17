@@ -101,15 +101,26 @@ module.exports.upload = (event, context, callback) => {
 
   Promise.all(parsed_files)
     .then(d => {
-      console.timeEnd("runTime");
-      console.log(`Completed! ${YEAR} ${SEQ}`);
-      return callback(null, { message: `Completed! ${YEAR} ${SEQ}`, status: 200, event });
+
+      // S3 deposit success file in bucket
+      const params = { Bucket: `s3db-acs-status-${dataset[YEAR].text}`, Key: `${SEQ}_${TYPE}.txt`, Body: "Success", ContentType: 'text/plain', ContentEncoding: 'gzip' };
+
+      s3.putObject(params, function(err, data) {
+        if (err) {
+          console.log('problem uploading status file');
+          console.log(err);
+        }
+        console.timeEnd("runTime");
+        console.log(`Completed! ${YEAR} ${SEQ} ${TYPE}`);
+        return callback(null, { message: `Completed! ${YEAR} ${SEQ} ${TYPE}`, status: 200, event });
+      });
+
     })
     .catch(error => {
       console.timeEnd("runTime");
-      console.log(`${YEAR} ${SEQ} Failed:`);
+      console.log(`${YEAR} ${SEQ}  ${TYPE} Failed:`);
       console.log(error);
-      return callback(null, { message: `${YEAR} ${SEQ} Failed:`, status: 500, event, error });
+      return callback(null, { message: `${YEAR} ${SEQ} ${TYPE} Failed:`, status: 500, event, error });
     });
 
 };
