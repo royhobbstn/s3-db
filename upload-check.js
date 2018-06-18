@@ -1,4 +1,5 @@
 const AWS = require('aws-sdk');
+const S3 = new AWS.S3;
 const { dataset } = require('./modules/settings.js');
 const Promise = require('bluebird');
 const states = require('./modules/states');
@@ -22,6 +23,7 @@ AWS.config.update({
 const settings = dataset[YEAR];
 const seq_count = parseInt(settings.seq_files, 10);
 
+// all possible combinations
 const lambda_invocations = [];
 
 for (let i = 1; i <= seq_count; i++) {
@@ -31,6 +33,41 @@ for (let i = 1; i <= seq_count; i++) {
     });
   });
 }
+
+// check bucket for existing
+
+const all_keys = [];
+
+let still_keys_left = true;
+
+
+const s3_params = {
+  Bucket: `s3db-acs-raw-${dataset[YEAR].text}`
+};
+
+
+S3.listObjectsV2(s3_params, function(err, data) {
+  if (err) {
+    console.log(err, err.stack);
+    process.exit();
+  }
+  else {
+    console.log(data.length);
+    if (data.length < 1000) {
+      still_keys_left = false;
+    }
+    all_keys.push(data);
+
+  }
+});
+
+
+// remove existing from list of possible
+
+// run like normal
+
+// todo check only mode
+/*
 
 const invoked = Promise.map(lambda_invocations, (instance) => {
 
@@ -74,7 +111,7 @@ Promise.all(invoked).then(() => {
     process.exit();
   });
 
-
+*/
 
 /*****************/
 
