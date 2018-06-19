@@ -19,6 +19,7 @@
   "homepage": "https://github.com/royhobbstn/s3-db#readme",
   "dependencies": {
     "aws-sdk": "^2.259.1",
+    "awscred": "^1.4.1",
     "bluebird": "^3.5.1",
     "csvtojson": "^1.1.9",
     "express": "^4.16.3",
@@ -27,6 +28,7 @@
     "request-promise": "^4.2.2",
     "requestretry": "^1.13.0",
     "rimraf": "^2.6.2",
+    "s3-list-all": "^1.0.0",
     "serverless-http": "^1.5.5",
     "unzipper": "^0.8.14",
     "yargs": "^10.0.3"

@@ -3,8 +3,11 @@ const S3 = new AWS.S3;
 const { dataset } = require('./modules/settings.js');
 const Promise = require('bluebird');
 const states = require('./modules/states');
+const aws_credentials = require('./aws_key.json');
+
 
 loadPrototype();
+
 
 const YEAR = '2015';
 
@@ -29,37 +32,46 @@ const lambda_invocations = [];
 for (let i = 1; i <= seq_count; i++) {
   ['allgeo', 'trbg'].forEach(geo => {
     Object.keys(states).forEach(state => {
-      lambda_invocations.push({ seq: String(i).padStart(3, '0'), geo, state });
+      const seq = String(i).padStart(3, '0');
+      lambda_invocations.push({ seq, geo, state, name: `e${YEAR}5${state}0${seq}000_${geo}` });
     });
   });
 }
 
 // check bucket for existing
 
-const all_keys = [];
+const s3_bucket = `s3db-acs-raw-${dataset[YEAR].text}`;
 
-let still_keys_left = true;
+console.log(`Reading keys from bucket: ${s3_bucket}`);
 
+const listAll = require('s3-list-all')({ accessKeyId: aws_credentials.accessKeyId, secretAccessKey: aws_credentials.secretAccessKey });
 
-const s3_params = {
-  Bucket: `s3db-acs-raw-${dataset[YEAR].text}`
-};
+listAll({ Bucket: s3_bucket, Prefix: '' }, function(err, results) {
 
-
-S3.listObjectsV2(s3_params, function(err, data) {
   if (err) {
-    console.log(err, err.stack);
+    console.log(err);
     process.exit();
   }
-  else {
-    console.log(data.length);
-    if (data.length < 1000) {
-      still_keys_left = false;
-    }
-    all_keys.push(data);
 
-  }
+  console.log(`Found ${results.length} keys.`);
+
+  const keys = results.map(d => d.Key.replace('.csv', ''));
+
+  // filter out existing from possible
+  const remaining = lambda_invocations.filter(opt => {
+    return !(keys.includes(opt.name));
+  });
+
+  console.log(remaining);
+  console.log(remaining.length);
+
+  // TODO not checking MOE;
+
+
 });
+
+
+
 
 
 // remove existing from list of possible
