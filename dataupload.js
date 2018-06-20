@@ -18,6 +18,7 @@ module.exports.upload = (event, context, callback) => {
 
   const geo_alias = GEO === 'allgeo' ? 'All_Geographies_Not_Tracts_Block_Groups' : GEO === 'trbg' ? 'Tracts_Block_Groups_Only' : null;
 
+
   if (geo_alias === null) {
     console.log("Please specify 'Tracts_Block_Groups_Only', 'All_Geographies_Not_Tracts_Block_Groups' for the 'geo' parameter.");
     process.exit();

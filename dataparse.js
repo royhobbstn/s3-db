@@ -3,16 +3,14 @@
 
 const states = require('./modules/states');
 const Promise = require('bluebird');
-const request = require('requestretry');
 const rp = require('request-promise');
 const fs = require('fs');
-const unzip = require('unzipper');
-const rimraf = require('rimraf');
 const AWS = require('aws-sdk');
 const s3 = new AWS.S3();
 const Papa = require('papaparse');
 const { dataset } = require('./modules/settings.js');
 const zlib = require('zlib');
+
 
 module.exports.parse = (event, context, callback) => {
 
@@ -20,12 +18,10 @@ module.exports.parse = (event, context, callback) => {
   console.log('starting...');
   console.time("runTime");
 
-  const split = event.split('|');
-
-  const YEAR = split[0];
-  const SEQ = split[1];
-  const GRP = split[2];
-  const M_or_E = split[3];
+  const YEAR = event.year;
+  const SEQ = event.seq;
+  const GRP = event.geo;
+  const M_or_E = event.type;
 
   console.log(YEAR);
   console.log(SEQ);
@@ -33,24 +29,15 @@ module.exports.parse = (event, context, callback) => {
   console.log(M_or_E);
 
 
-  return readyWorkspace()
-    .then(() => {
-      return downloadDataFromACS();
-    })
-    .then(() => {
-      // delete moe or est files
-      return deleteUnused();
-    })
-    .then(() => {
-      console.log('downloading schemas and geoid information');
-      return Promise.all([createSchemaFiles(), getGeoKey(), readDirectory()]);
-    })
+
+  console.log('downloading schemas and geoid information');
+  Promise.all([getSchemaFiles(), getGeoKey(), downloadDataFromS3()])
     .then((setup_information) => {
       const schemas = setup_information[0];
       const keyed_lookup = setup_information[1];
-      const files = setup_information[2];
+      const s3_data = setup_information[2];
       console.log('parsing ACS data');
-      return parseData(schemas, keyed_lookup, files);
+      return parseData(schemas, keyed_lookup, s3_data);
     })
     .then(d => {
       console.log(`saved: ${d.length} files.`);
@@ -78,54 +65,33 @@ module.exports.parse = (event, context, callback) => {
   /****************/
 
 
-  function readyWorkspace() {
-    return new Promise((resolve, reject) => {
-      // delete /tmp/CensusDL if exists
-      rimraf('/tmp/CensusDL', function(err) {
-        if (err) {
-          console.log(err);
-          return reject(err);
-        }
-
-        // logic to set up directories
-        const directories_in_order = ['/tmp/CensusDL', '/tmp/CensusDL/stage', '/tmp/CensusDL/output'];
-
-        directories_in_order.forEach(dir => {
-          if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir);
-          }
-        });
-
-        console.log('workspace ready');
-        resolve('done');
-      });
-    });
-  }
-
-  function downloadDataFromACS() {
-    const fileType = GRP === 'trbg' ? 'Tracts_Block_Groups_Only' : 'All_Geographies_Not_Tracts_Block_Groups';
+  function downloadDataFromS3() {
 
     const states_data_ready = Object.keys(states).map((state, index) => {
-      const fileName = `${YEAR}5${state}0${SEQ}000.zip`;
-      const url = `https://www2.census.gov/programs-surveys/acs/summary_file/${YEAR}/data/5_year_seq_by_state/${states[state]}/${fileType}/${fileName}`;
-
-      console.log(url);
 
       return new Promise((resolve, reject) => {
-        request({ url, encoding: null }).pipe(unzip.Extract({ path: `/tmp/CensusDL/stage` })
-          .on('close', function() {
-            console.log(`${fileName} unzipped!`);
-          })
-          .on('error', function(err) {
-            console.log('download problem');
-            console.log(err);
-            reject(err);
-          })
-          .on('finish', function() {
-            resolve('done unzip');
-          })
-        );
+        const params = {
+          Bucket: `s3db-acs-raw-${dataset[YEAR].text}`,
+          Key: `${M_or_E}${YEAR}5${state}0${SEQ}000_${GRP}.csv`
+        };
 
+        s3.getObject(params, function(err, data) {
+          if (err) {
+            console.log('error in S3 getObject');
+            console.log(err, err.stack);
+            return reject(err);
+          }
+          else {
+            zlib.gunzip(data.Body, function(err, dezipped) {
+              if (err) {
+                console.log('error in gunzip');
+                console.log(err);
+              }
+              return resolve(dezipped.toString());
+            });
+
+          }
+        });
 
       });
     });
@@ -133,54 +99,8 @@ module.exports.parse = (event, context, callback) => {
     return Promise.all(states_data_ready);
   }
 
-  function deleteUnused() {
-    //
-    return new Promise((resolve, reject) => {
 
-      // deal with unzip library bugs
-
-      console.log('waiting for all files to unzip: unzip library bug workaround');
-      setTimeout(function() {
-        // for file in directory
-        fs.readdir(`/tmp/CensusDL/stage`, (err, files) => {
-          if (err) {
-            return reject(err);
-          }
-
-          const delete_these_files = files.filter(file => {
-            return file.slice(0, 1) !== M_or_E;
-          });
-
-          const deleted_files = delete_these_files.map(file => {
-
-            return new Promise((resolve, reject) => {
-              fs.unlink(`/tmp/CensusDL/stage/${file}`, function(err) {
-                if (err) {
-                  // won't reject on error
-                  console.log(err);
-                  return reject(false);
-                }
-                resolve(true);
-              });
-            });
-
-          });
-
-          Promise.all(deleted_files).then(() => {
-            return resolve(true);
-          });
-
-        });
-
-      }, 5000);
-
-
-
-    });
-  }
-
-
-  function createSchemaFiles() {
+  function getSchemaFiles() {
 
     // Load schema for the dataset
     return rp({
@@ -206,164 +126,142 @@ module.exports.parse = (event, context, callback) => {
 
 
 
-  function readDirectory() {
-    return new Promise((resolve, reject) => {
-      // for file in directory
-      fs.readdir(`/tmp/CensusDL/stage`, (err, files) => {
-        if (err) {
-          reject(err);
-        }
+  function parseData(schemas, keyed_lookup, s3data, keys) {
 
-        resolve(files);
-      });
-    });
-  }
-
-
-
-  function parseData(schemas, keyed_lookup, files) {
-
-    // loop thrrough all state files
-    const parsed_files = Promise.map(files, (file) => {
-      const e_or_m = file.slice(0, 1);
+    // loop through all state files
+    const parsed_files = Promise.map(s3data, (data, index) => {
 
       return new Promise((resolve, reject) => {
 
-        fs.readFile(`/tmp/CensusDL/stage/${file}`, 'utf8', (err, data) => {
-          if (err) {
-            return reject(err);
-          }
+        const state = Object.keys(states)[index];
+        const data_cache = {};
+        
+        Papa.parse(data, {
+          header: false,
+          skipEmptyLines: true,
+          step: function(results) {
 
-          const state = file.slice(6, 8);
-          const data_cache = {};
-
-          Papa.parse(data, {
-            header: false,
-            skipEmptyLines: true,
-            step: function(results) {
-
-              if (results.errors.length) {
-                console.log(results);
-                console.log('E: ', results.errors);
-                reject(results.errors);
-                process.exit();
-              }
-
-              const seq_string = file.split('.')[0].slice(-6, -3);
-              const seq_fields = schemas[seq_string];
-
-              // combine with geo on stustab(2)+logrecno(5)
-              const unique_key = results.data[0][2] + results.data[0][5];
-              const geo_record = keyed_lookup[unique_key];
-
-              // only tracts, bg, county, place, state right now
-              const sumlev = geo_record.slice(0, 3);
-
-              const component = geo_record.slice(3, 5);
-              if (sumlev !== '140' && sumlev !== '150' && sumlev !== '050' && sumlev !== '160' && sumlev !== '040') {
-                return;
-              }
-              if (component !== '00') {
-                return;
-              }
-
-              const geoid = geo_record.split('US')[1];
-
-              let parsed_geoid = "";
-
-              if (sumlev === '040') {
-                parsed_geoid = geoid.slice(-2);
-              }
-              else if (sumlev === '050') {
-                parsed_geoid = geoid.slice(-5);
-              }
-              else if (sumlev === '140') {
-                parsed_geoid = geoid.slice(-11);
-              }
-              else if (sumlev === '150') {
-                parsed_geoid = geoid.slice(-12);
-              }
-              else if (sumlev === '160') {
-                parsed_geoid = geoid.slice(-7);
-              }
-              else {
-                console.error('unknown geography');
-                console.log(geoid);
-                console.log(sumlev);
-                process.exit();
-              }
-
-              results.data[0].forEach((d, i) => {
-
-                if (i <= 5) {
-                  // index > 5 excludes: FILEID, FILETYPE, STUSAB, CHARITER, SEQUENCE, LOGRECNO
-                  return;
-                }
-
-                const attr = (e_or_m === 'm') ? seq_fields[i] + '_moe' : seq_fields[i];
-
-                if (!data_cache[attr]) {
-                  data_cache[attr] = {};
-                }
-
-                if (!data_cache[attr][sumlev]) {
-                  data_cache[attr][sumlev] = {};
-                }
-
-                const num_key = (d === '' || d === '.') ? null : Number(d);
-
-                // this is how the data will be modeled in S3
-                data_cache[attr][sumlev][parsed_geoid] = num_key;
-
-              });
-
-            },
-            complete: function() {
-              console.log(`parsed ${file}`);
-
-
-              let put_object_array = [];
-
-              Object.keys(data_cache).forEach(attr => {
-                Object.keys(data_cache[attr]).forEach(sumlev => {
-                  put_object_array.push(`${attr}/${sumlev}`);
-                });
-              });
-
-              // const write_files_total = put_object_array.length;
-              // console.log(`saving ${write_files_total} intermediate files.`);
-
-              const mapped_promises = Promise.map(put_object_array, (obj) => {
-
-                const split = obj.split('/');
-                const attr = split[0];
-                const sumlev = split[1];
-
-                const key = `${attr}-${sumlev}|${state}.json`;
-                const data = JSON.stringify(data_cache[attr][sumlev]);
-
-                return new Promise((resolve, reject) => {
-
-                  fs.writeFile(`/tmp/CensusDL/output/${key}`, data, 'utf8', (err) => {
-
-                    if (err) {
-                      console.log(err);
-                      return reject(err);
-                    }
-                    return resolve(key);
-
-                  });
-
-                });
-
-              }, { concurrency: 10 });
-
-              resolve(mapped_promises);
+            if (results.errors.length) {
+              console.log(results);
+              console.log('E: ', results.errors);
+              reject(results.errors);
+              process.exit();
             }
 
-          });
+            const seq_fields = schemas[SEQ];
+
+            // combine with geo on stustab(2)+logrecno(5)
+            const unique_key = results.data[0][2] + results.data[0][5];
+            const geo_record = keyed_lookup[unique_key];
+
+            // only tracts, bg, county, place, state right now
+            const sumlev = geo_record.slice(0, 3);
+
+            const component = geo_record.slice(3, 5);
+            if (sumlev !== '140' && sumlev !== '150' && sumlev !== '050' && sumlev !== '160' && sumlev !== '040') {
+              return;
+            }
+            if (component !== '00') {
+              return;
+            }
+
+            const geoid = geo_record.split('US')[1];
+
+            let parsed_geoid = "";
+
+            if (sumlev === '040') {
+              parsed_geoid = geoid.slice(-2);
+            }
+            else if (sumlev === '050') {
+              parsed_geoid = geoid.slice(-5);
+            }
+            else if (sumlev === '140') {
+              parsed_geoid = geoid.slice(-11);
+            }
+            else if (sumlev === '150') {
+              parsed_geoid = geoid.slice(-12);
+            }
+            else if (sumlev === '160') {
+              parsed_geoid = geoid.slice(-7);
+            }
+            else {
+              console.error('unknown geography');
+              console.log(geoid);
+              console.log(sumlev);
+              process.exit();
+            }
+
+            results.data[0].forEach((d, i) => {
+
+              if (i <= 5) {
+                // index > 5 excludes: FILEID, FILETYPE, STUSAB, CHARITER, SEQUENCE, LOGRECNO
+                return;
+              }
+
+              const attr = (M_or_E === 'm') ? seq_fields[i] + '_moe' : seq_fields[i];
+
+              if (!data_cache[attr]) {
+                data_cache[attr] = {};
+              }
+
+              if (!data_cache[attr][sumlev]) {
+                data_cache[attr][sumlev] = {};
+              }
+
+              const num_key = (d === '' || d === '.') ? null : Number(d);
+
+              // this is how the data will be modeled in S3
+              data_cache[attr][sumlev][parsed_geoid] = num_key;
+
+            });
+
+          },
+          complete: function() {
+            console.log(`parsed ${state}`);
+
+
+            let put_object_array = [];
+
+            Object.keys(data_cache).forEach(attr => {
+              Object.keys(data_cache[attr]).forEach(sumlev => {
+                put_object_array.push(`${attr}/${sumlev}`);
+              });
+            });
+
+            // const write_files_total = put_object_array.length;
+            // console.log(`saving ${write_files_total} intermediate files.`);
+
+            const mapped_promises = Promise.map(put_object_array, (obj) => {
+
+              const split = obj.split('/');
+              const attr = split[0];
+              const sumlev = split[1];
+
+              const key = `${attr}-${sumlev}|${state}.json`;
+              const data = JSON.stringify(data_cache[attr][sumlev]);
+
+              return new Promise((resolve, reject) => {
+
+                fs.writeFile(`/tmp/${key}`, data, 'utf8', (err) => {
+
+                  if (err) {
+                    console.log(err);
+                    return reject(err);
+                  }
+                  return resolve(key);
+
+                });
+
+              });
+
+            }, { concurrency: 10 });
+
+            resolve(mapped_promises);
+          }
 
         });
+
+
 
       });
 
@@ -378,7 +276,7 @@ module.exports.parse = (event, context, callback) => {
     //
     return new Promise((resolve, reject) => {
       // for file in directory
-      fs.readdir(`/tmp/CensusDL/output`, (err, files) => {
+      fs.readdir(`/tmp`, (err, files) => {
         if (err) {
           reject(err);
         }
@@ -413,7 +311,7 @@ module.exports.parse = (event, context, callback) => {
       const file_data = file_list.map(file => {
 
         return new Promise((resolve, reject) => {
-          fs.readFile(`/tmp/CensusDL/output/${file}`, (err, data) => {
+          fs.readFile(`/tmp/${file}`, (err, data) => {
             if (err) {
               console.log(err);
               return reject(err);
