@@ -28,6 +28,7 @@ module.exports.parse = (event, context, callback) => {
   console.log(GRP);
   console.log(M_or_E);
 
+  const data_cache = {};
 
 
   console.log('downloading schemas and geoid information');
@@ -41,17 +42,11 @@ module.exports.parse = (event, context, callback) => {
     })
     .then(d => {
       console.log(`saved: ${d.length} files.`);
-      return uniqueFiles();
-    })
-    .then(filesystem => {
-      console.log(`found ${filesystem.uniques.length} unique keys to write to S3.`);
-      console.log('combining ACS data & writing to S3');
-      return combineData(filesystem);
+      return uploadToS3();
     })
     .then(() => {
       console.log('all done');
       console.timeEnd("runTime");
-
       return callback(null, { message: 'Success!', status: 200, event });
     })
     .catch(err => {
@@ -129,13 +124,12 @@ module.exports.parse = (event, context, callback) => {
   function parseData(schemas, keyed_lookup, s3data, keys) {
 
     // loop through all state files
-    const parsed_files = Promise.map(s3data, (data, index) => {
+    const parsed_files = s3data.map((data, index) => {
 
       return new Promise((resolve, reject) => {
 
         const state = Object.keys(states)[index];
-        const data_cache = {};
-        
+
         Papa.parse(data, {
           header: false,
           skipEmptyLines: true,
@@ -218,45 +212,7 @@ module.exports.parse = (event, context, callback) => {
           },
           complete: function() {
             console.log(`parsed ${state}`);
-
-
-            let put_object_array = [];
-
-            Object.keys(data_cache).forEach(attr => {
-              Object.keys(data_cache[attr]).forEach(sumlev => {
-                put_object_array.push(`${attr}/${sumlev}`);
-              });
-            });
-
-            // const write_files_total = put_object_array.length;
-            // console.log(`saving ${write_files_total} intermediate files.`);
-
-            const mapped_promises = Promise.map(put_object_array, (obj) => {
-
-              const split = obj.split('/');
-              const attr = split[0];
-              const sumlev = split[1];
-
-              const key = `${attr}-${sumlev}|${state}.json`;
-              const data = JSON.stringify(data_cache[attr][sumlev]);
-
-              return new Promise((resolve, reject) => {
-
-                fs.writeFile(`/tmp/${key}`, data, 'utf8', (err) => {
-
-                  if (err) {
-                    console.log(err);
-                    return reject(err);
-                  }
-                  return resolve(key);
-
-                });
-
-              });
-
-            }, { concurrency: 10 });
-
-            resolve(mapped_promises);
+            return resolve(state);
           }
 
         });
@@ -265,36 +221,23 @@ module.exports.parse = (event, context, callback) => {
 
       });
 
-    }, { concurrency: 1 });
+    });
 
     return Promise.all(parsed_files);
 
   }
 
 
-  function uniqueFiles() {
-    //
-    return new Promise((resolve, reject) => {
-      // for file in directory
-      fs.readdir(`/tmp`, (err, files) => {
-        if (err) {
-          reject(err);
-        }
+  function uploadToS3() {
+    console.log(JSON.stringify(data_cache));
 
-        // get unique filenames to write to S3 (basically get all file names and create unique set ignoring state)
-        const uniques = Array.from(new Set(files.reduce((acc, current) => {
-          acc.push(current.split('|')[0]);
-          return acc;
-        }, [])));
+    // todo find old writing logic in previous commit
+    // todo main problem is probably fitting it into Lambda memory limit
 
-        console.log('uniques: ' + uniques.length);
-
-        resolve({ uniques, files });
-      });
-    });
   }
 
 
+  // todo keep for a bit because it has s3 writing logic
   function combineData({ uniques, files }) {
     //
 
