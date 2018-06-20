@@ -1,11 +1,15 @@
 const AWS = require('aws-sdk');
+const S3 = new AWS.S3;
 const { dataset } = require('./modules/settings.js');
 const Promise = require('bluebird');
 const states = require('./modules/states');
+const aws_credentials = require('./aws_key.json');
+
 
 loadPrototype();
 
-const YEAR = '2015';
+
+const YEAR = '2016';
 
 /****/
 
@@ -22,58 +26,94 @@ AWS.config.update({
 const settings = dataset[YEAR];
 const seq_count = parseInt(settings.seq_files, 10);
 
+// all possible combinations
 const lambda_invocations = [];
 
 for (let i = 1; i <= seq_count; i++) {
   ['allgeo', 'trbg'].forEach(geo => {
     Object.keys(states).forEach(state => {
-      lambda_invocations.push({ seq: String(i).padStart(3, '0'), geo, state });
+      const seq = String(i).padStart(3, '0');
+      lambda_invocations.push({ seq, geo, state, name: `e${YEAR}5${state}0${seq}000_${geo}`, type: 'e' });
+      lambda_invocations.push({ seq, geo, state, name: `m${YEAR}5${state}0${seq}000_${geo}`, type: 'm' });
     });
   });
 }
 
-const invoked = Promise.map(lambda_invocations, (instance) => {
+// check bucket for existing
 
-  return new Promise((resolve, reject) => {
+const s3_bucket = `s3db-acs-raw-${dataset[YEAR].text}`;
 
-    let lambda = new AWS.Lambda({ apiVersion: '2015-03-31' });
+console.log(`Reading keys from bucket: ${s3_bucket}`);
 
-    const params = {
-      FunctionName: "s3-db-dev-dataupload",
-      InvocationType: "Event",
-      LogType: "None",
-      Payload: JSON.stringify({
-        'year': YEAR,
-        'seq': instance.seq,
-        'geo': instance.geo,
-        'state': instance.state
-      })
-    };
-    lambda.invoke(params, function(err, data) {
-      if (err) {
-        console.log(err, err.stack);
-        return reject(err);
-      }
-      else {
-        console.log(data);
-        return resolve(data);
-      }
+const listAll = require('s3-list-all')({ accessKeyId: aws_credentials.accessKeyId, secretAccessKey: aws_credentials.secretAccessKey });
+
+listAll({ Bucket: s3_bucket, Prefix: '' }, function(err, results) {
+
+  if (err) {
+    console.log(err);
+    process.exit();
+  }
+
+  console.log(`Found ${results.length} keys.`);
+
+  const keys = results.map(d => d.Key.replace('.csv', ''));
+
+  // filter out existing from possible
+  const remaining = lambda_invocations.filter(opt => {
+    return !(keys.includes(opt.name));
+  });
+
+  console.log(`Missing ${remaining.length} keys.`);
+
+  // reduce down to file level by removing the MOE records
+  const files_to_retrieve = remaining.filter(item => item.type === 'e');
+
+  console.log(`Retrieving data from ${files_to_retrieve.length} files.`);
+
+
+  const invoked = Promise.map(files_to_retrieve, (file) => {
+
+    return new Promise((resolve, reject) => {
+
+      let lambda = new AWS.Lambda({ apiVersion: '2015-03-31' });
+
+      const params = {
+        FunctionName: "s3-db-dev-dataupload",
+        InvocationType: "Event",
+        LogType: "None",
+        Payload: JSON.stringify({
+          'year': YEAR,
+          'seq': file.seq,
+          'geo': file.geo,
+          'state': file.state
+        })
+      };
+      lambda.invoke(params, function(err, data) {
+        if (err) {
+          console.log(err, err.stack);
+          return reject(err);
+        }
+        else {
+          console.log(data);
+          return resolve(data);
+        }
+      });
+
     });
 
-  });
-
-}, { concurrency: 1 });
+  }, { concurrency: 1 });
 
 
-Promise.all(invoked).then(() => {
-    console.log('all lambdas invoked');
-  })
-  .catch(err => {
-    console.log(err);
-    console.log('something bad happened');
-    process.exit();
-  });
+  Promise.all(invoked).then(() => {
+      console.log('all lambdas invoked');
+    })
+    .catch(err => {
+      console.log(err);
+      console.log('something bad happened');
+      process.exit();
+    });
 
+});
 
 
 /*****************/
