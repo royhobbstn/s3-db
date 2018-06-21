@@ -4,7 +4,6 @@
 const states = require('./modules/states');
 const Promise = require('bluebird');
 const rp = require('request-promise');
-const fs = require('fs');
 const AWS = require('aws-sdk');
 const s3 = new AWS.S3();
 const Papa = require('papaparse');
@@ -41,11 +40,11 @@ module.exports.parse = (event, context, callback) => {
       return parseData(schemas, keyed_lookup, s3_data);
     })
     .then(d => {
-      console.log(`saved: ${d.length} files.`);
+      console.log(`uploading to S3...`);
       return uploadToS3();
     })
-    .then(() => {
-      console.log('all done');
+    .then(files => {
+      console.log(`uploaded ${files.length} files to S3`);
       console.timeEnd("runTime");
       return callback(null, { message: 'Success!', status: 200, event });
     })
@@ -229,60 +228,26 @@ module.exports.parse = (event, context, callback) => {
 
 
   function uploadToS3() {
-    console.log(JSON.stringify(data_cache));
+    let put_object_array = [];
 
-    // todo find old writing logic in previous commit
-    // todo main problem is probably fitting it into Lambda memory limit
+    Object.keys(data_cache).forEach(attr => {
+      Object.keys(data_cache[attr]).forEach(sumlev => {
 
-  }
+        const key = `${attr}/${sumlev}.json`;
+        const data = JSON.stringify(data_cache[attr][sumlev]);
+
+        const promise = new Promise((resolve, reject) => {
 
 
-  // todo keep for a bit because it has s3 writing logic
-  function combineData({ uniques, files }) {
-    //
-
-    const file_list_array = uniques.map(prefix => {
-      // for each unique get a list of all files that match that pattern
-      return files.filter(file => {
-        return file.split('|')[0] === prefix;
-      });
-    });
-
-    // each of these will be one saved S3 file
-    const files_saved = Promise.map(file_list_array, (file_list) => {
-
-      const file_data = file_list.map(file => {
-
-        return new Promise((resolve, reject) => {
-          fs.readFile(`/tmp/${file}`, (err, data) => {
-            if (err) {
-              console.log(err);
-              return reject(err);
+          zlib.gzip(data, function(error, result) {
+            if (error) {
+              return reject(error);
             }
-            return resolve(JSON.parse(data));
-          });
-        });
 
-      });
+            // `s3db-acs-${dataset[YEAR].text}`
 
-      return Promise.all(file_data).then(data => {
-
-        const reduced = data.reduce((acc, current) => {
-          return { ...acc, ...current };
-        });
-
-        return new Promise((resolve, reject) => {
-
-          zlib.gzip(JSON.stringify(reduced), function(error, result) {
-            if (error) { return reject(error); }
-
-            // console.log(`s3db-acs-${dataset[YEAR].text}`);
-            const key = file_list[0].split('|')[0].replace('-', '/');
-            // console.log(key);
-
-            const params = { Bucket: `s3db-acs-${dataset[YEAR].text}`, Key: `${key}.json`, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
+            const params = { Bucket: 'acs-test-bucket', Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
             s3.putObject(params, function(err, data) {
-
               if (err) {
                 console.log(err);
                 return reject(err);
@@ -292,15 +257,17 @@ module.exports.parse = (event, context, callback) => {
 
           });
 
+
         });
+
+        put_object_array.push(promise);
+
       });
+    });
 
-    }, { concurrency: 10 });
+    return Promise.all(put_object_array);
 
-    return Promise.all(files_saved);
   }
-
-
 
 
 
