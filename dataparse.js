@@ -9,7 +9,8 @@ const s3 = new AWS.S3();
 const Papa = require('papaparse');
 const { dataset } = require('./modules/settings.js');
 const zlib = require('zlib');
-
+const rimraf = require('rimraf');
+const fs = require('fs');
 
 module.exports.parse = (event, context, callback) => {
 
@@ -27,25 +28,31 @@ module.exports.parse = (event, context, callback) => {
   console.log(GRP);
   console.log(M_or_E);
 
-  const data_cache = {};
 
-
-  console.log('downloading schemas and geoid information');
-  Promise.all([getSchemaFiles(), getGeoKey(), downloadDataFromS3()])
+  readyWorkspace()
+    .then(() => {
+      console.log('downloading data and metadata');
+      return Promise.all([getSchemaFiles(), getGeoKey(), downloadDataFromS3()]);
+    })
     .then((setup_information) => {
       const schemas = setup_information[0];
       const keyed_lookup = setup_information[1];
       const s3_data = setup_information[2];
-      console.log('parsing ACS data');
+      console.log('parsing ACS files');
       return parseData(schemas, keyed_lookup, s3_data);
     })
     .then(d => {
-      console.log(`uploading to S3...`);
-      return uploadToS3();
+      console.log(`parsed: ${d.length} files.`);
+      return uniqueFiles();
     })
-    .then(files => {
-      console.log(`uploaded ${files.length} files to S3`);
+    .then(filesystem => {
+      console.log(`found ${filesystem.uniques.length} unique keys to write to S3.`);
+      return combineData(filesystem);
+    })
+    .then(() => {
+      console.log('all done');
       console.timeEnd("runTime");
+
       return callback(null, { message: 'Success!', status: 200, event });
     })
     .catch(err => {
@@ -57,6 +64,26 @@ module.exports.parse = (event, context, callback) => {
 
 
   /****************/
+
+  function readyWorkspace() {
+    return new Promise((resolve, reject) => {
+      // logic to set up temp directory
+      const directory = '/tmp/CensusDL';
+
+      // delete /tmp/CensusDL if exists
+      rimraf(directory, function(err) {
+        if (err) {
+          console.log(err);
+          return reject(err);
+        }
+
+        fs.mkdirSync(directory);
+
+        console.log('workspace ready');
+        resolve('done');
+      });
+    });
+  }
 
 
   function downloadDataFromS3() {
@@ -123,11 +150,15 @@ module.exports.parse = (event, context, callback) => {
   function parseData(schemas, keyed_lookup, s3data, keys) {
 
     // loop through all state files
-    const parsed_files = s3data.map((data, index) => {
+    const parsed_files = Promise.map(s3data, (data, index) => {
 
       return new Promise((resolve, reject) => {
 
         const state = Object.keys(states)[index];
+
+        console.log(state);
+
+        let data_cache = {};
 
         Papa.parse(data, {
           header: false,
@@ -210,44 +241,126 @@ module.exports.parse = (event, context, callback) => {
 
           },
           complete: function() {
-            console.log(`parsed ${state}`);
-            return resolve(state);
+
+            let put_object_array = [];
+
+            Object.keys(data_cache).forEach(attr => {
+              Object.keys(data_cache[attr]).forEach(sumlev => {
+                put_object_array.push(`${attr}/${sumlev}`);
+              });
+            });
+
+            const mapped_promises = Promise.map(put_object_array, (obj) => {
+
+              const split = obj.split('/');
+              const attr = split[0];
+              const sumlev = split[1];
+
+              const key = `${attr}-${sumlev}|${state}.json`;
+              const data = JSON.stringify(data_cache[attr][sumlev]);
+
+              return new Promise((resolve, reject) => {
+
+                fs.writeFile(`/tmp/CensusDL/${key}`, data, 'utf8', (err) => {
+
+                  if (err) {
+                    console.log(err);
+                    return reject(err);
+                  }
+                  return resolve(key);
+
+                });
+
+              });
+
+            }, { concurrency: 1 });
+
+            return Promise.all(mapped_promises).then(() => {
+              return resolve('done');
+            });
+
+
           }
 
         });
 
 
-
       });
 
-    });
+    }, { concurrency: 1 });
 
     return Promise.all(parsed_files);
 
   }
 
 
-  function uploadToS3() {
-    let put_object_array = [];
 
-    Object.keys(data_cache).forEach(attr => {
-      Object.keys(data_cache[attr]).forEach(sumlev => {
+  function uniqueFiles() {
+    //
+    return new Promise((resolve, reject) => {
+      // for file in directory
+      fs.readdir(`/tmp/CensusDL`, (err, files) => {
+        if (err) {
+          reject(err);
+        }
 
-        const key = `${attr}/${sumlev}.json`;
-        const data = JSON.stringify(data_cache[attr][sumlev]);
+        // get unique filenames to write to S3 (basically get all file names and create unique set ignoring state)
+        const uniques = Array.from(new Set(files.reduce((acc, current) => {
+          acc.push(current.split('|')[0]);
+          return acc;
+        }, [])));
 
-        const promise = new Promise((resolve, reject) => {
+        resolve({ uniques, files });
+      });
+    });
+  }
 
 
-          zlib.gzip(data, function(error, result) {
-            if (error) {
-              return reject(error);
+  function combineData({ uniques, files }) {
+    //
+
+    const file_list_array = uniques.map(prefix => {
+      // for each unique get a list of all files that match that pattern
+      return files.filter(file => {
+        return file.split('|')[0] === prefix;
+      });
+    });
+
+    // each of these will be one saved S3 file
+    const files_saved = Promise.map(file_list_array, (file_list) => {
+
+      const file_data = file_list.map(file => {
+
+        return new Promise((resolve, reject) => {
+          fs.readFile(`/tmp/CensusDL/${file}`, (err, data) => {
+            if (err) {
+              console.log(err);
+              return reject(err);
             }
+            return resolve(JSON.parse(data));
+          });
+        });
+
+      });
+
+      return Promise.all(file_data).then(data => {
+
+        const reduced = data.reduce((acc, current) => {
+          return { ...acc, ...current };
+        });
+
+        return new Promise((resolve, reject) => {
+
+          zlib.gzip(JSON.stringify(reduced), function(error, result) {
+            if (error) { return reject(error); }
+
+            const key = file_list[0].split('|')[0].replace('-', '/');
+
 
             // `s3db-acs-${dataset[YEAR].text}`
-
-            const params = { Bucket: 'acs-test-bucket', Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
+            const params = { Bucket: `acs-test-bucket`, Key: `${key}.json`, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
             s3.putObject(params, function(err, data) {
+
               if (err) {
                 console.log(err);
                 return reject(err);
@@ -257,17 +370,15 @@ module.exports.parse = (event, context, callback) => {
 
           });
 
-
         });
-
-        put_object_array.push(promise);
-
       });
-    });
 
-    return Promise.all(put_object_array);
+    }, { concurrency: 10 });
 
+    return Promise.all(files_saved);
   }
+
+
 
 
 
