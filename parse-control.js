@@ -1,10 +1,25 @@
 const argv = require('yargs').argv;
 const Promise = require('bluebird');
-const { url } = require('./secret-url.js');
-const request = require('requestretry');
+const AWS = require('aws-sdk');
 const rp = require('request-promise');
+const { dataset } = require('./modules/settings.js');
+
+/****/
+
+AWS.config.update({
+  region: 'us-west-2',
+  maxRetries: 0,
+  retryDelayOptions: {
+    base: 10000
+  }
+});
+
+/****/
 
 setup();
+
+
+// TODO below using dataset module
 
 const CONFIG = {
   2014: {
@@ -37,41 +52,103 @@ if (!config_obj) {
 const SEQ_COUNT = config_obj.seq;
 const BUCKET_NAME = config_obj.bucket;
 
-const combinations = [];
+getSchemaFiles().then(schemas => {
+    //
 
-// all possible combinations
-for (let i = 1; i <= SEQ_COUNT; i++) {
-  combinations.push({ year: YEAR, seq: String(i).padStart(3, '0'), geo: 'allgeo', type: 'e' });
-  combinations.push({ year: YEAR, seq: String(i).padStart(3, '0'), geo: 'trbg', type: 'e' });
-  combinations.push({ year: YEAR, seq: String(i).padStart(3, '0'), geo: 'allgeo', type: 'm' });
-  combinations.push({ year: YEAR, seq: String(i).padStart(3, '0'), geo: 'trbg', type: 'm' });
-}
+    const combinations = [];
 
-const completed_lambdas = Promise.map(combinations.slice(0, 3), (lambda) => {
+    // TODO remove after testing
+    const SEQ_COUNT = 104;
 
-  const uri = `${url}?year=${lambda.year}&seq=${lambda.seq}&geo=${lambda.geo}&type=${lambda.type}`;
+    // all possible combinations
+    for (let i = 104; i <= SEQ_COUNT; i++) {
+      combinations.push({ year: YEAR, seq: String(i).padStart(3, '0'), geo: 'allgeo', type: 'e' });
+      combinations.push({ year: YEAR, seq: String(i).padStart(3, '0'), geo: 'trbg', type: 'e' });
+      combinations.push({ year: YEAR, seq: String(i).padStart(3, '0'), geo: 'allgeo', type: 'm' });
+      combinations.push({ year: YEAR, seq: String(i).padStart(3, '0'), geo: 'trbg', type: 'm' });
+    }
 
-  console.log(uri);
+    const field_combinations = [];
 
-  return rp({
-    method: 'get',
-    uri,
-    fullResponse: false
-  });
+    combinations.forEach(d => {
 
-}, { concurrency: 1 });
+      const fields = schemas[d.seq];
 
-Promise.all(completed_lambdas)
-  .then(() => {
+      const filtered_fields = fields.filter(field => {
+        return !['FILEID', 'FILETYPE', 'STUSAB', 'CHARITER', 'SEQUENCE', 'LOGRECNO'].includes(field);
+      });
+
+      for (let i = 0; i < filtered_fields.length; i += 30) {
+        const attributes = filtered_fields.slice(i, i + 30);
+        field_combinations.push(Object.assign({}, d, { attributes }));
+      }
+
+    });
+
+
+    const completed_lambdas = Promise.map(field_combinations, (c) => {
+
+      console.log(c);
+
+      return new Promise((resolve, reject) => {
+
+        let lambda = new AWS.Lambda({ apiVersion: '2015-03-31' });
+
+        const params = {
+          FunctionName: "s3-db-dev-dataparse",
+          InvocationType: "RequestResponse",
+          LogType: "None",
+          Payload: JSON.stringify({
+            'year': c.year,
+            'seq': c.seq,
+            'geo': c.geo,
+            'type': c.type,
+            'attributes': c.attributes
+          })
+        };
+        lambda.invoke(params, function(err, data) {
+          if (err) {
+            console.log(err, err.stack);
+            return reject(err);
+          }
+          else {
+            console.log(data);
+            return resolve(data);
+          }
+        });
+
+      });
+    }, { concurrency: 1 });
+
+    return Promise.all(completed_lambdas);
+
+
+  }).then(() => {
     console.log(`done processing ACS ${YEAR}!`);
-  }).catch(err => {
+  })
+  .catch(err => {
     console.log(err);
   });
 
 
 
+
+
 /*******************/
 
+
+function getSchemaFiles() {
+
+  // TODO use AWS JS SDK
+  // Load schema for the dataset
+  return rp({
+    method: 'get',
+    uri: `https://s3-us-west-2.amazonaws.com/s3db-acs-metadata-${dataset[YEAR].text}/s${dataset[YEAR].text}.json`,
+    json: true,
+    fullResponse: false
+  });
+
+}
 
 function setup() {
 

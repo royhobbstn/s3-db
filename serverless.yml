@@ -16,9 +16,7 @@ provider:
           - "arn:aws:s3:::s3db-acs-raw-1216/*"
           - "arn:aws:s3:::s3db-acs-raw-1115/*"
           - "arn:aws:s3:::s3db-acs-raw-1014/*"
-          - "arn:aws:s3:::s3db-acs-status-1216/*"
-          - "arn:aws:s3:::s3db-acs-status-1115/*"
-          - "arn:aws:s3:::s3db-acs-status-1014/*"
+          - "arn:aws:s3:::acs-test-bucket/*"
   stage: dev
   region: us-west-2
   timeout: 300

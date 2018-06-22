@@ -17,17 +17,15 @@ module.exports.parse = (event, context, callback) => {
   console.log('starting...');
   console.time("runTime");
 
+  console.log(JSON.stringify(event));
+
   const YEAR = event.year;
   const SEQ = event.seq;
   const GRP = event.geo;
   const M_or_E = event.type;
   const ATTRIBUTES = event.attributes;
 
-  console.log(YEAR);
-  console.log(SEQ);
-  console.log(GRP);
-  console.log(M_or_E);
-  console.log(ATTRIBUTES);
+
 
   const data_cache = {};
 
@@ -188,11 +186,7 @@ module.exports.parse = (event, context, callback) => {
 
             results.data[0].forEach((d, i) => {
 
-              if (i <= 5) {
-                // index > 5 excludes: FILEID, FILETYPE, STUSAB, CHARITER, SEQUENCE, LOGRECNO
-                return;
-              }
-
+              // only parse attributes passed in by request
               if (!ATTRIBUTES.includes(seq_fields[i])) {
                 return;
               }
@@ -216,7 +210,6 @@ module.exports.parse = (event, context, callback) => {
 
           },
           complete: function() {
-            console.log(`parsed ${state}`);
             return resolve(state);
           }
 

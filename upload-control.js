@@ -8,7 +8,7 @@ const aws_credentials = require('./aws_key.json');
 
 loadPrototype();
 
-
+// todo CLI
 const YEAR = '2016';
 
 /****/
