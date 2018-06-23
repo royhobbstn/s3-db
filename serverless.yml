@@ -24,7 +24,7 @@ provider:
 functions:
   dataparse:
     handler: dataparse.parse
-    memorySize: 3006
+    memorySize: 1024
   dataupload:
     handler: dataupload.upload
     memorySize: 1024

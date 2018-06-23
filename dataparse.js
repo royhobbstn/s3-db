@@ -25,10 +25,7 @@ module.exports.parse = (event, context, callback) => {
   const M_or_E = event.type;
   const ATTRIBUTES = event.attributes;
 
-
-
   const data_cache = {};
-
 
   console.log('downloading schemas and geoid information');
   Promise.all([getSchemaFiles(), getGeoKey(), downloadDataFromS3()])
@@ -237,15 +234,12 @@ module.exports.parse = (event, context, callback) => {
 
         const promise = new Promise((resolve, reject) => {
 
-
           zlib.gzip(data, function(error, result) {
             if (error) {
               return reject(error);
             }
 
-            // `s3db-acs-${dataset[YEAR].text}`
-
-            const params = { Bucket: 'acs-test-bucket', Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
+            const params = { Bucket: `s3db-acs-${dataset[YEAR].text}`, Key: key, Body: result, ContentType: 'application/json', ContentEncoding: 'gzip' };
             s3.putObject(params, function(err, data) {
               if (err) {
                 console.log(err);

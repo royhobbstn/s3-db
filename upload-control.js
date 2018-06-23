@@ -4,12 +4,19 @@ const { dataset } = require('./modules/settings.js');
 const Promise = require('bluebird');
 const states = require('./modules/states');
 const aws_credentials = require('./aws_key.json');
+const argv = require('yargs').argv;
+
+
+if (argv._.length === 0) {
+  console.log('fatal error.  Run like: node upload-control.js 2015');
+  process.exit();
+}
+
+const YEAR = argv._[0];
 
 
 loadPrototype();
 
-// todo CLI
-const YEAR = '2016';
 
 /****/
 
