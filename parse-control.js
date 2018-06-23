@@ -167,13 +167,8 @@ getSchemaFiles()
                 return reject(err);
               }
               else {
-                console.log(data);
-
-                // slow down invocations just a bit
-                setTimeout(() => {
-                  return resolve(data);
-                }, 1000);
-
+                console.log(`status: ${data.StatusCode}, year: ${c.year}, seq: ${c.seq}, geo: ${c.geo}, type: ${c.type}, attributes: ${c.attributes.length}`);
+                return resolve(data);
               }
             });
 
