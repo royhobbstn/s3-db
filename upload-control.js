@@ -5,6 +5,7 @@ const Promise = require('bluebird');
 const states = require('./modules/states');
 const aws_credentials = require('./aws_key.json');
 const argv = require('yargs').argv;
+const readline = require('readline');
 
 
 if (argv._.length === 0) {
@@ -75,50 +76,63 @@ listAll({ Bucket: s3_bucket, Prefix: '' }, function(err, results) {
   // reduce down to file level by removing the MOE records
   const files_to_retrieve = remaining.filter(item => item.type === 'e');
 
-  console.log(`Retrieving data from ${files_to_retrieve.length} files.`);
+  console.log(`There are ${files_to_retrieve.length} files left to upload.`);
 
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
 
-  const invoked = Promise.map(files_to_retrieve, (file) => {
+  rl.question('Continue y/n ? ', (answer) => {
+    rl.close();
 
-    return new Promise((resolve, reject) => {
+    if (answer !== 'y') {
+      process.exit();
+    }
 
-      let lambda = new AWS.Lambda({ apiVersion: '2015-03-31' });
+    const invoked = Promise.map(files_to_retrieve, (file) => {
 
-      const params = {
-        FunctionName: "s3-db-dev-dataupload",
-        InvocationType: "Event",
-        LogType: "None",
-        Payload: JSON.stringify({
-          'year': YEAR,
-          'seq': file.seq,
-          'geo': file.geo,
-          'state': file.state
-        })
-      };
-      lambda.invoke(params, function(err, data) {
-        if (err) {
-          console.log(err, err.stack);
-          return reject(err);
-        }
-        else {
-          console.log(data);
-          return resolve(data);
-        }
+      return new Promise((resolve, reject) => {
+
+        let lambda = new AWS.Lambda({ apiVersion: '2015-03-31' });
+
+        const params = {
+          FunctionName: "s3-db-dev-dataupload",
+          InvocationType: "Event",
+          LogType: "None",
+          Payload: JSON.stringify({
+            'year': YEAR,
+            'seq': file.seq,
+            'geo': file.geo,
+            'state': file.state
+          })
+        };
+        lambda.invoke(params, function(err, data) {
+          if (err) {
+            console.log(err, err.stack);
+            return reject(err);
+          }
+          else {
+            console.log(data);
+            return resolve(data);
+          }
+        });
+
       });
 
-    });
-
-  }, { concurrency: 1 });
+    }, { concurrency: 1 });
 
 
-  Promise.all(invoked).then(() => {
-      console.log('all lambdas invoked');
-    })
-    .catch(err => {
-      console.log(err);
-      console.log('something bad happened');
-      process.exit();
-    });
+    Promise.all(invoked).then(() => {
+        console.log('all lambdas invoked');
+      })
+      .catch(err => {
+        console.log(err);
+        console.log('something bad happened');
+        process.exit();
+      });
+
+  });
 
 });
 

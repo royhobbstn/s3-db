@@ -4,6 +4,7 @@ const AWS = require('aws-sdk');
 const aws_credentials = require('./aws_key.json');
 const rp = require('request-promise');
 const { dataset } = require('./modules/settings.js');
+const readline = require('readline');
 
 AWS.config.update({
   region: 'us-west-2',
@@ -126,56 +127,67 @@ getSchemaFiles()
         //
       });
 
-      console.log(`Retrieving data from ${files_to_retrieve.length} files.`);
+      console.log(`There are ${files_to_retrieve.length} files left to parse.`);
 
 
-      const completed_lambdas = Promise.map(files_to_retrieve, (c) => {
 
-        return new Promise((resolve, reject) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
 
-          let lambda = new AWS.Lambda({ apiVersion: '2015-03-31' });
+      rl.question('Continue y/n ? ', (answer) => {
+        rl.close();
 
-          const params = {
-            FunctionName: "s3-db-dev-dataparse",
-            InvocationType: "Event",
-            LogType: "None",
-            Payload: JSON.stringify({
-              'year': c.year,
-              'seq': c.seq,
-              'geo': c.geo,
-              'type': c.type,
-              'attributes': c.attributes
-            })
-          };
-          lambda.invoke(params, function(err, data) {
-            if (err) {
-              console.log(err, err.stack);
-              return reject(err);
-            }
-            else {
-              console.log(data);
+        if (answer !== 'y') {
+          process.exit();
+        }
 
-              // slow down invocations just a bit
-              setTimeout(() => {
-                return resolve(data);
-              }, 150);
+        const completed_lambdas = Promise.map(files_to_retrieve, (c) => {
 
-            }
+          return new Promise((resolve, reject) => {
+
+            let lambda = new AWS.Lambda({ apiVersion: '2015-03-31' });
+
+            const params = {
+              FunctionName: "s3-db-dev-dataparse",
+              InvocationType: "Event",
+              LogType: "None",
+              Payload: JSON.stringify({
+                'year': c.year,
+                'seq': c.seq,
+                'geo': c.geo,
+                'type': c.type,
+                'attributes': c.attributes
+              })
+            };
+            lambda.invoke(params, function(err, data) {
+              if (err) {
+                console.log(err, err.stack);
+                return reject(err);
+              }
+              else {
+                console.log(data);
+
+                // slow down invocations just a bit
+                setTimeout(() => {
+                  return resolve(data);
+                }, 1000);
+
+              }
+            });
+
+          });
+        }, { concurrency: 1 });
+
+        Promise.all(completed_lambdas).then(() => {
+            console.log(`done processing ACS ${YEAR}!`);
+          })
+          .catch(err => {
+            console.log(err);
           });
 
-        });
-      }, { concurrency: 1 });
-
-      Promise.all(completed_lambdas).then(() => {
-          console.log(`done processing ACS ${YEAR}!`);
-        })
-        .catch(err => {
-          console.log(err);
-        });
-
-
-
-
+      });
 
     }); // end listAll
 
