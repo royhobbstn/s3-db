@@ -6,26 +6,46 @@ Data processed w/ (mostly) serverless pipeline.
 
 ## Main
 
+Assumes NodeJS 8+, NPM.
+Serverless via the [Serverless Framework](https://serverless.com/)
+
 ```
 git clone https://github.com/royhobbstn/s3-db.git
 cd s3-db
+npm install
+serverless deploy
+
 ```
 
-Then:
+Then create an ```aws_key.json``` file in the same format as ```aws_key.example.js```.
+
+
+# Metadata
+
+Populate metadata bucket (prerequisite for running data):
 
 ```
 node parse-acs-geofiles.js $year
 node parse-acs-schemas.js $year
 ``` 
 
-for your target year (2014, 2015, 2016)
+where ```$year``` is one of (2014, 2015, 2016)
+
+
+# Upload
+
+Step one is to upload Census Data into a Cloud staging bucket.
 
 ```
-serverless deploy
+upload-control $year
 ```
 
-Then:
+Step two is to parse that data into the desired format.
 
 ```
-node run-data.sh $year
+parse-control $year
 ```
+
+# Notes
+
+Bucket names are hardcoded (sorry).
