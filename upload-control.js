@@ -3,7 +3,7 @@ const S3 = new AWS.S3;
 const { dataset } = require('./modules/settings.js');
 const Promise = require('bluebird');
 const states = require('./modules/states');
-const aws_credentials = require('./aws_key.json');
+// **CREDENTIALS** const aws_credentials = require('./aws_key.json');
 const argv = require('yargs').argv;
 const readline = require('readline');
 
@@ -53,7 +53,8 @@ const s3_bucket = `s3db-acs-raw-${dataset[YEAR].text}`;
 
 console.log(`Reading keys from bucket: ${s3_bucket}`);
 
-const listAll = require('s3-list-all')({ accessKeyId: aws_credentials.accessKeyId, secretAccessKey: aws_credentials.secretAccessKey });
+// **CREDENTIALS if not on an Amazon Instance
+const listAll = require('s3-list-all')( /*{ accessKeyId: aws_credentials.accessKeyId, secretAccessKey: aws_credentials.secretAccessKey }*/ );
 
 listAll({ Bucket: s3_bucket, Prefix: '' }, function(err, results) {
 
